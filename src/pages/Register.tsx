@@ -8,17 +8,21 @@ export default function Register() {
   const [name, setName] = useState("")
   const [address, setAddress] = useState("")
   const [err, setErr] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
   const nav = useNavigate()
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErr("")
+    setIsLoading(true)
+    
     try {
       await register({ email, password, name, address })
-
       nav("/login")
     } catch (e: any) {
       setErr(e?.response?.data?.message || "Đăng ký thất bại")
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -35,7 +39,9 @@ export default function Register() {
         />
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
         <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Address" />
-        <button type="submit">Đăng ký</button>
+        <button type="submit" disabled={isLoading}>
+          {isLoading ? "Đang đăng ký..." : "Đăng ký"}
+        </button>
       </form>
       {err && <p style={{ color: "red" }}>{err}</p>}
     </div>
