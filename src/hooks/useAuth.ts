@@ -1,21 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from "react"
 
 export function useAuth() {
   const [token, setToken] = useState<string | null>(null)
-  
+  const storageKey = import.meta.env.VITE_STORAGE_TOKEN
+
   useEffect(() => {
-    setToken(localStorage.getItem('certx_token'))
+    setToken(localStorage.getItem(storageKey))
   }, [])
-  
-  const save = (t: string) => { 
-    localStorage.setItem('certx_token', t)
-    setToken(t) 
+
+  const save = (token: string) => {
+    localStorage.setItem(storageKey, token)
+    setToken(token)
   }
-  
-  const clear = () => { 
-    localStorage.removeItem('certx_token')
-    setToken(null) 
+
+  const clear = () => {
+    localStorage.removeItem(storageKey)
+    setToken(null)
   }
-  
+
   return { token, save, clear }
 }
