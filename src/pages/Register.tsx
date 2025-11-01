@@ -1,6 +1,6 @@
 import { useState } from "react"
+import { Link, useNavigate } from "react-router-dom"
 import { register } from "../api/auth.api"
-import { useNavigate } from "react-router-dom"
 
 export default function Register() {
   const [email, setEmail] = useState("")
@@ -15,7 +15,7 @@ export default function Register() {
     e.preventDefault()
     setErr("")
     setIsLoading(true)
-    
+
     try {
       await register({ email, password, name, address })
       nav("/login")
@@ -27,23 +27,41 @@ export default function Register() {
   }
 
   return (
-    <div style={{ maxWidth: 420, margin: "40px auto" }}>
-      <h2>Đăng ký Issuer</h2>
-      <form onSubmit={submit}>
-        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Mật khẩu"
-        />
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
-        <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Address" />
-        <button type="submit" disabled={isLoading}>
-          {isLoading ? "Đang đăng ký..." : "Đăng ký"}
-        </button>
-      </form>
-      {err && <p style={{ color: "red" }}>{err}</p>}
+    <div className="auth-shell">
+      <div className="auth-card">
+        <header className="card-header">
+          <h2 className="card-title">Tạo tài khoản Issuer</h2>
+          <p className="card-subtitle">Đăng ký đơn vị cấp phát để đưa chứng chỉ của bạn lên blockchain CertX.</p>
+        </header>
+
+        {err && <div className="alert">⚠️ {err}</div>}
+
+        <form onSubmit={submit}>
+          <div className="field">
+            <label>Email</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="issuer@certx.io" type="email" required />
+          </div>
+          <div className="field">
+            <label>Mật khẩu</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required />
+          </div>
+          <div className="field">
+            <label>Tên đơn vị</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="CertX Academy" required />
+          </div>
+          <div className="field">
+            <label>Ví phát hành (Ethereum)</label>
+            <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="0x..." required />
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={isLoading}>
+            {isLoading ? "Đang đăng ký..." : "Đăng ký Issuer"}
+          </button>
+        </form>
+
+        <p className="auth-meta">
+          Đã có tài khoản? <Link to="/login">Đăng nhập ngay</Link>
+        </p>
+      </div>
     </div>
   )
 }

@@ -1,14 +1,12 @@
-export default function StatusBadge({ status }: { status:'VALID'|'REVOKED'|'NOT_FOUND' }) {
-  const color = status === 'VALID' ? '#16a34a' : status === 'REVOKED' ? '#dc2626' : '#6b7280'
-  const text  = status === 'VALID' ? 'Hợp lệ' : status === 'REVOKED' ? 'Đã thu hồi' : 'Không tìm thấy'
-  return (
-    <span style={{ 
-      padding:'4px 8px', 
-      background:color, 
-      color:'#fff', 
-      borderRadius:6 
-    }}>
-      {text}
-    </span>
-  )
+type Props = { status: 'VALID' | 'REVOKED' | 'NOT_FOUND' }
+
+const STATUS_MAP: Record<Props['status'], { label: string; tone: 'success' | 'danger' | 'muted' }> = {
+  VALID: { label: 'Hợp lệ', tone: 'success' },
+  REVOKED: { label: 'Đã thu hồi', tone: 'danger' },
+  NOT_FOUND: { label: 'Không tìm thấy', tone: 'muted' },
+}
+
+export default function StatusBadge({ status }: Props) {
+  const state = STATUS_MAP[status]
+  return <span className={`status-badge ${state.tone}`}>{state.label}</span>
 }
