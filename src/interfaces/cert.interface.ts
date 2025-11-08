@@ -2,6 +2,8 @@ export default interface CertIPFS {
   holderName: string
   degree: string
   issuedDate: string
+  expirationDate?: string
+  certxIssuedDate?: string // Ngày up chứng chỉ trên CertX (ngày xác thực)
   issuerName: string
   docHash: string
   mimeType?: string

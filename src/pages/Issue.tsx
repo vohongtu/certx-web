@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { issueCert, revokeCert } from '../api/certs.api'
 import FilePicker from '../components/FilePicker'
 import QRViewer from '../components/QRViewer'
+import DateRangePicker from '../components/DateRangePicker'
 
 export default function Issue() {
   const [file, setFile] = useState<File | null>(null)
   const [holderName, setHolderName] = useState('')
   const [degree, setDegree] = useState('')
-  const [issuedDate, setIssuedDate] = useState('')
+  const [issuedDate, setIssuedDate] = useState<string | null>(null)
+  const [expirationDate, setExpirationDate] = useState<string | null>(null)
+  const [showDatePicker, setShowDatePicker] = useState(false)
   const [result, setResult] = useState<{ hash: string; verifyUrl: string } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -22,6 +25,18 @@ export default function Issue() {
       return
     }
 
+    // Kiểm tra ngày cấp bắt buộc
+    if (!issuedDate) {
+      setError('Vui lòng chọn ngày cấp')
+      return
+    }
+
+    // Kiểm tra ngày hết hạn phải sau ngày cấp
+    if (expirationDate && expirationDate <= issuedDate) {
+      setError('Ngày hết hạn phải sau ngày cấp')
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
@@ -31,6 +46,9 @@ export default function Issue() {
       fd.append('holderName', holderName)
       fd.append('degree', degree)
       fd.append('issuedDate', issuedDate)
+      if (expirationDate) {
+        fd.append('expirationDate', expirationDate)
+      }
 
       const res = await issueCert(fd)
       setResult({ hash: res.hash, verifyUrl: res.verifyUrl })
@@ -39,6 +57,16 @@ export default function Issue() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleDateRangeChange = (start: string | null, end: string | null) => {
+    setIssuedDate(start)
+    setExpirationDate(end)
+  }
+
+  const handleClearDates = () => {
+    setIssuedDate(null)
+    setExpirationDate(null)
   }
 
   const doRevoke = async () => {
@@ -87,14 +115,75 @@ export default function Issue() {
               <label>Văn bằng</label>
               <input value={degree} onChange={(e) => setDegree(e.target.value)} placeholder='Bachelor of Science' />
             </div>
-            <div className='field'>
-              <label>Ngày cấp</label>
-              <input type='date' value={issuedDate} onChange={(e) => setIssuedDate(e.target.value)} />
+            <div className='field field-full-width'>
+              <label>Ngày cấp và ngày hết hạn</label>
+              <div className='date-field-container'>
+                {(issuedDate || expirationDate) && (
+                  <div className='date-selected-info'>
+                    <span className='date-label'>Ngày cấp:</span>
+                    <strong className='date-value'>{issuedDate || 'Chưa chọn'}</strong>
+                    {expirationDate && (
+                      <>
+                        <span className='date-separator'>→</span>
+                        <span className='date-label'>Ngày hết hạn:</span>
+                        <strong className='date-value'>{expirationDate}</strong>
+                      </>
+                    )}
+                    <button
+                      type='button'
+                      onClick={handleClearDates}
+                      className='date-clear-btn'
+                      title='Xóa ngày đã chọn'
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+                {!showDatePicker ? (
+                  <button
+                    type='button'
+                    className='btn btn-outline date-picker-toggle-btn'
+                    onClick={() => setShowDatePicker(true)}
+                  >
+                    <span className='date-picker-icon'>📅</span>
+                    <span>Chọn ngày cấp và ngày hết hạn</span>
+                  </button>
+                ) : (
+                  <div className='date-picker-container'>
+                    <div className='date-picker-wrapper'>
+                      <button
+                        type='button'
+                        onClick={() => setShowDatePicker(false)}
+                        className='date-picker-close-btn'
+                        title='Đóng'
+                      >
+                        ×
+                      </button>
+                      <DateRangePicker
+                        startDate={issuedDate}
+                        endDate={expirationDate}
+                        onDateChange={handleDateRangeChange}
+                      />
+                    </div>
+                    <button
+                      type='button'
+                      className='btn btn-ghost date-picker-hide-btn'
+                      onClick={() => setShowDatePicker(false)}
+                    >
+                      ✕ Ẩn lịch
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           <div className='card-footer'>
-            <button className='btn btn-primary' onClick={doIssue} disabled={!file || !holderName || !degree || !issuedDate || isLoading}>
+            <button 
+              className='btn btn-primary' 
+              onClick={doIssue} 
+              disabled={!file || !holderName || !degree || !issuedDate || isLoading || !!(expirationDate && issuedDate && expirationDate <= issuedDate)}
+            >
               {isLoading ? 'Đang xử lý...' : 'Cấp phát chứng chỉ'}
             </button>
           </div>

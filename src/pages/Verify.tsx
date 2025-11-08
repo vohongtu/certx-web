@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { verifyHash } from '../api/certs.api'
+import { verifyHash, CertStatus } from '../api/certs.api'
 import StatusBadge from '../components/StatusBadge'
 import { getCertIPFSData } from '../api/ipfs.api'
 import CertIPFS from '../interfaces/cert.interface'
+import { formatDateShort, formatDateRange } from '../utils/format'
+import { calculateStatus } from '../utils/status'
 
 type VerifyResult = {
-  status: 'VALID' | 'REVOKED' | 'NOT_FOUND'
+  status: CertStatus | 'NOT_FOUND'
   data: CertIPFS | null
   metadataUri?: string
 }
@@ -48,6 +50,9 @@ export default function Verify() {
       const metadataUri = metadataURI
       setSource(apiSource ?? 'chain')
 
+      // Tính toán status dựa trên expirationDate từ metadata
+      const finalStatus = calculateStatus(status, data.expirationDate)
+
       let uint8Array: Uint8Array | null = null
       const filePayload = (data as any)?.file
 
@@ -62,7 +67,7 @@ export default function Verify() {
         setFile({ url, mimeType })
       }
 
-      setRes({ status, data, metadataUri })
+      setRes({ status: finalStatus, data, metadataUri })
     } catch (err: any) {
       console.error('Verify error:', err)
       setFile(null)
@@ -95,7 +100,8 @@ export default function Verify() {
     ? [
         { label: 'Họ tên', value: res.data.holderName },
         { label: 'Văn bằng', value: res.data.degree },
-        { label: 'Ngày cấp', value: res.data.issuedDate },
+        { label: 'Ngày cấp - Ngày hết hạn', value: formatDateRange(res.data.issuedDate, res.data.expirationDate) },
+        { label: 'Ngày xác thực', value: formatDateShort(res.data.certxIssuedDate) },
         { label: 'Đơn vị cấp', value: res.data.issuerName },
         { label: 'Hash (đã watermark)', value: res.data.docHash },
         res.data.hashBeforeWatermark

@@ -1,8 +1,9 @@
-type Props = { status: 'VALID' | 'REVOKED' | 'NOT_FOUND' }
+type Props = { status: 'VALID' | 'REVOKED' | 'EXPIRED' | 'NOT_FOUND' }
 
-const STATUS_MAP: Record<Props['status'], { label: string; tone: 'success' | 'danger' | 'muted' }> = {
+const STATUS_MAP: Record<Props['status'], { label: string; tone: 'success' | 'danger' | 'muted' | 'warning' }> = {
   VALID: { label: 'Hợp lệ', tone: 'success' },
   REVOKED: { label: 'Đã thu hồi', tone: 'danger' },
+  EXPIRED: { label: 'Đã hết hạn', tone: 'warning' },
   NOT_FOUND: { label: 'Không tìm thấy', tone: 'muted' },
 }
 

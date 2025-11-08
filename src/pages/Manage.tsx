@@ -1,18 +1,9 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react'
 import StatusBadge from '../components/StatusBadge'
-import { CertSummary, CertListResponse, listCerts, revokeCert } from '../api/certs.api'
+import { CertSummary, CertListResponse, listCerts, revokeCert, CertStatus } from '../api/certs.api'
+import { formatDateShort, formatDateRange } from '../utils/format'
 
 const PAGE_LIMIT = 5
-
-const formatDateShort = (value?: string) => {
-  if (!value) return '—'
-  try {
-    const date = new Date(value)
-    return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
-  } catch {
-    return value
-  }
-}
 
 const truncateHash = (hash: string, start = 8, end = 6) => {
   if (hash.length <= start + end) return hash
@@ -54,7 +45,7 @@ export default function Manage() {
   const [pagination, setPagination] = useState<{ page: number; limit: number; total: number; totalPages: number }>({ page: 1, limit: PAGE_LIMIT, total: 0, totalPages: 1 })
   const [searchText, setSearchText] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
-  const [status, setStatus] = useState<'ALL' | 'VALID' | 'REVOKED'>('ALL')
+  const [status, setStatus] = useState<'ALL' | CertStatus>('ALL')
   const [page, setPage] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -95,7 +86,7 @@ export default function Manage() {
   }
 
   const handleStatusChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    setStatus(event.target.value as 'ALL' | 'VALID' | 'REVOKED')
+    setStatus(event.target.value as 'ALL' | CertStatus)
     setPage(1)
   }
 
@@ -174,7 +165,8 @@ export default function Manage() {
                   <th>Người nhận</th>
                   <th>Hash</th>
                   <th>Trạng thái</th>
-                  <th>Ngày cấp</th>
+                  <th>Ngày cấp - Ngày hết hạn</th>
+                  <th>Ngày xác thực</th>
                   <th>Ngày thu hồi</th>
                   <th>Hành động</th>
                 </tr>
@@ -200,7 +192,8 @@ export default function Manage() {
                       </div>
                     </td>
                     <td><StatusBadge status={cert.status} /></td>
-                    <td className='date-cell'>{formatDateShort(cert.createdAt || cert.issuedDate)}</td>
+                    <td className='date-cell'>{formatDateRange(cert.issuedDate, cert.expirationDate)}</td>
+                    <td className='date-cell'>{formatDateShort(cert.certxIssuedDate)}</td>
                     <td className='date-cell'>{formatDateShort(cert.revokedAt)}</td>
                     <td>
                       <div className='table-actions'>
@@ -255,8 +248,13 @@ export default function Manage() {
                 </div>
 
                 <div className='cert-info-row'>
-                  <span className='cert-label'>Ngày cấp:</span>
-                  <span className='cert-value'>{formatDateShort(cert.createdAt || cert.issuedDate)}</span>
+                  <span className='cert-label'>Ngày cấp - Ngày hết hạn:</span>
+                  <span className='cert-value'>{formatDateRange(cert.issuedDate, cert.expirationDate)}</span>
+                </div>
+
+                <div className='cert-info-row'>
+                  <span className='cert-label'>Ngày xác thực:</span>
+                  <span className='cert-value'>{formatDateShort(cert.certxIssuedDate)}</span>
                 </div>
 
                 {cert.revokedAt && (
@@ -364,6 +362,7 @@ export default function Manage() {
             <option value='ALL'>Tất cả trạng thái</option>
             <option value='VALID'>Hợp lệ</option>
             <option value='REVOKED'>Đã thu hồi</option>
+            <option value='EXPIRED'>Đã hết hạn</option>
           </select>
           <button type='submit' className='btn btn-primary' disabled={isLoading}>Tìm kiếm</button>
           <button type='button' className='btn btn-ghost' onClick={handleResetFilters} disabled={isLoading}>Xoá lọc</button>

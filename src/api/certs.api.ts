@@ -1,6 +1,6 @@
 import client from './client'
 
-export type CertStatus = 'VALID' | 'REVOKED'
+export type CertStatus = 'VALID' | 'REVOKED' | 'EXPIRED'
 
 export interface CertSummary {
   id: string
@@ -8,6 +8,8 @@ export interface CertSummary {
   holderName: string
   degree: string
   issuedDate: string
+  expirationDate?: string
+  certxIssuedDate?: string // Ngày up chứng chỉ trên CertX (ngày xác thực)
   status: CertStatus
   metadataUri?: string
   createdAt: string
@@ -138,7 +140,7 @@ export interface CertListParams {
   page?: number
   limit?: number
   q?: string
-  status?: 'VALID' | 'REVOKED' | 'ALL'
+  status?: CertStatus | 'ALL'
 }
 
 export interface CertListResponse {
