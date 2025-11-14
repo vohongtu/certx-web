@@ -1,39 +1,24 @@
 import { useState } from 'react'
-import { issueCert, revokeCert } from '../api/certs.api'
+import { uploadFile } from '../api/certs.api'
 import FilePicker from '../components/FilePicker'
-import QRViewer from '../components/QRViewer'
-import DateRangePicker from '../components/DateRangePicker'
+import DocumentTypeSelector from '../components/DocumentTypeSelector'
 
 export default function Issue() {
   const [file, setFile] = useState<File | null>(null)
   const [holderName, setHolderName] = useState('')
   const [degree, setDegree] = useState('')
-  const [issuedDate, setIssuedDate] = useState<string | null>(null)
-  const [expirationDate, setExpirationDate] = useState<string | null>(null)
-  const [showDatePicker, setShowDatePicker] = useState(false)
-  const [result, setResult] = useState<{ hash: string; verifyUrl: string } | null>(null)
+  const [credentialTypeId, setCredentialTypeId] = useState<string | null>(null)
+  const [result, setResult] = useState<{ id: string; docHash: string; status: string; message: string } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const doIssue = async () => {
+  const doUpload = async () => {
     if (!file) return
 
     // Kiểm tra kích thước file (5MB = 5 * 1024 * 1024 bytes)
     const maxSize = 5 * 1024 * 1024
     if (file.size > maxSize) {
       setError(`File quá lớn. Kích thước tối đa là 5MB. File của bạn: ${(file.size / 1024 / 1024).toFixed(2)}MB`)
-      return
-    }
-
-    // Kiểm tra ngày cấp bắt buộc
-    if (!issuedDate) {
-      setError('Vui lòng chọn ngày cấp')
-      return
-    }
-
-    // Kiểm tra ngày hết hạn phải sau ngày cấp
-    if (expirationDate && expirationDate <= issuedDate) {
-      setError('Ngày hết hạn phải sau ngày cấp')
       return
     }
 
@@ -45,42 +30,20 @@ export default function Issue() {
       fd.append('file', file)
       fd.append('holderName', holderName)
       fd.append('degree', degree)
-      fd.append('issuedDate', issuedDate)
-      if (expirationDate) {
-        fd.append('expirationDate', expirationDate)
+      if (credentialTypeId) {
+        fd.append('credentialTypeId', credentialTypeId)
       }
+      // Không gửi issuedDate - backend sẽ tự động set = ngày upload
 
-      const res = await issueCert(fd)
-      setResult({ hash: res.hash, verifyUrl: res.verifyUrl })
+      const res = await uploadFile(fd)
+      setResult(res)
+      // Reset form sau khi upload thành công
+      setFile(null)
+      setHolderName('')
+      setDegree('')
+      setCredentialTypeId(null)
     } catch (err: any) {
-      setError(err.message || 'Có lỗi xảy ra khi cấp phát chứng chỉ')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleDateRangeChange = (start: string | null, end: string | null) => {
-    setIssuedDate(start)
-    setExpirationDate(end)
-  }
-
-  const handleClearDates = () => {
-    setIssuedDate(null)
-    setExpirationDate(null)
-  }
-
-  const doRevoke = async () => {
-    if (!result?.hash) return
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      await revokeCert(result.hash)
-      alert('Đã thu hồi chứng chỉ!')
-      setResult(null)
-    } catch (err: any) {
-      setError(err.message || 'Có lỗi xảy ra khi thu hồi chứng chỉ')
+      setError(err.message || 'Có lỗi xảy ra khi upload file')
     } finally {
       setIsLoading(false)
     }
@@ -90,101 +53,59 @@ export default function Issue() {
     <div className='page'>
       <div className='page-header'>
         <div>
-          <div className='page-eyebrow'>Issuer Console</div>
-          <h1 className='page-title'>Cấp phát chứng chỉ mới</h1>
-          <p className='page-subtitle'>Upload file chứng chỉ, hệ thống sẽ chèn watermark, tính hash và ghi nhận lên blockchain.</p>
+          <div className='page-eyebrow'>User Console</div>
+          <h1 className='page-title'>Upload file chứng chỉ</h1>
+          <p className='page-subtitle'>Upload file chứng chỉ để admin duyệt và cấp phát. File sẽ được xử lý và chờ duyệt.</p>
         </div>
-        {result && <span className='badge-soft'>Hash mới đã tạo</span>}
+        {result && <span className='badge-soft'>Đã upload thành công</span>}
       </div>
 
       <div className='page-grid page-grid--split'>
         <section className='card'>
           <header className='card-header'>
             <h2 className='card-title'>Thông tin chứng chỉ</h2>
-            <p className='card-subtitle'>Điền các trường bắt buộc rồi tải lên file PDF/ảnh của chứng chỉ.</p>
+            <p className='card-subtitle'>Điền các trường bắt buộc rồi tải lên file PDF/ảnh của chứng chỉ. File sẽ chờ admin duyệt.</p>
           </header>
 
           <FilePicker onPick={setFile} file={file} onError={setError} />
 
-          <div className='form-grid'>
-            <div className='field'>
-              <label>Họ tên người nhận</label>
-              <input value={holderName} onChange={(e) => setHolderName(e.target.value)} placeholder='Nguyễn Văn A' />
+          <div className='form-grid' style={{ gap: '12px' }}>
+            <div className='field' style={{ marginBottom: '0' }}>
+              <label style={{ fontSize: '14px', marginBottom: '6px' }}>Họ tên người nhận</label>
+              <input 
+                value={holderName} 
+                onChange={(e) => setHolderName(e.target.value)} 
+                placeholder='Nguyễn Văn A'
+                style={{ padding: '8px 12px', fontSize: '14px' }}
+              />
             </div>
-            <div className='field'>
-              <label>Văn bằng</label>
-              <input value={degree} onChange={(e) => setDegree(e.target.value)} placeholder='Bachelor of Science' />
+            <div className='field' style={{ marginBottom: '0' }}>
+              <label style={{ fontSize: '14px', marginBottom: '6px' }}>Văn bằng</label>
+              <DocumentTypeSelector
+                value={credentialTypeId || degree}
+                onChange={(id, name) => {
+                  setCredentialTypeId(id)
+                  setDegree(name)
+                }}
+                placeholder="Chọn loại văn bằng..."
+                allowCustom={true}
+              />
             </div>
-            <div className='field field-full-width'>
-              <label>Ngày cấp và ngày hết hạn</label>
-              <div className='date-field-container'>
-                {(issuedDate || expirationDate) && (
-                  <div className='date-selected-info'>
-                    <span className='date-label'>Ngày cấp:</span>
-                    <strong className='date-value'>{issuedDate || 'Chưa chọn'}</strong>
-                    {expirationDate && (
-                      <>
-                        <span className='date-separator'>→</span>
-                        <span className='date-label'>Ngày hết hạn:</span>
-                        <strong className='date-value'>{expirationDate}</strong>
-                      </>
-                    )}
-                    <button
-                      type='button'
-                      onClick={handleClearDates}
-                      className='date-clear-btn'
-                      title='Xóa ngày đã chọn'
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-                {!showDatePicker ? (
-                  <button
-                    type='button'
-                    className='btn btn-outline date-picker-toggle-btn'
-                    onClick={() => setShowDatePicker(true)}
-                  >
-                    <span className='date-picker-icon'>📅</span>
-                    <span>Chọn ngày cấp và ngày hết hạn</span>
-                  </button>
-                ) : (
-                  <div className='date-picker-container'>
-                    <div className='date-picker-wrapper'>
-                      <button
-                        type='button'
-                        onClick={() => setShowDatePicker(false)}
-                        className='date-picker-close-btn'
-                        title='Đóng'
-                      >
-                        ×
-                      </button>
-                      <DateRangePicker
-                        startDate={issuedDate}
-                        endDate={expirationDate}
-                        onDateChange={handleDateRangeChange}
-                      />
-                    </div>
-                    <button
-                      type='button'
-                      className='btn btn-ghost date-picker-hide-btn'
-                      onClick={() => setShowDatePicker(false)}
-                    >
-                      ✕ Ẩn lịch
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
+          </div>
+          
+          <div className='info-box' style={{ marginTop: '16px', padding: '12px', background: 'rgba(37, 99, 235, 0.1)', borderRadius: '8px' }}>
+            <small className='field-hint'>
+              ℹ️ Admin sẽ mất khoản 2 đến 3 giờ để hoàn thành cấp phát chứng chỉ. Vui lòng chờ để nhận được chứng chỉ.
+            </small>
           </div>
 
           <div className='card-footer'>
             <button 
               className='btn btn-primary' 
-              onClick={doIssue} 
-              disabled={!file || !holderName || !degree || !issuedDate || isLoading || !!(expirationDate && issuedDate && expirationDate <= issuedDate)}
+              onClick={doUpload} 
+              disabled={!file || !holderName || !degree || isLoading}
             >
-              {isLoading ? 'Đang xử lý...' : 'Cấp phát chứng chỉ'}
+              {isLoading ? 'Đang upload...' : 'Upload file'}
             </button>
           </div>
         </section>
@@ -192,38 +113,37 @@ export default function Issue() {
         <section className='card'>
           <header className='card-header'>
             <h2 className='card-title'>Kết quả & hướng dẫn</h2>
-            <p className='card-subtitle'>Theo dõi hash và trạng thái để chia sẻ cho người nhận.</p>
+            <p className='card-subtitle'>Theo dõi trạng thái upload và chờ admin duyệt.</p>
           </header>
 
           {error && <div className='alert'>⚠️ {error}</div>}
 
           {result ? (
             <>
+              <div className='alert alert-success'>
+                ✅ {result.message}
+              </div>
               <div className='field'>
-                <label>Hash đã ghi nhận</label>
-                <div className='hash-pill'>{result.hash}</div>
+                <label>Hash</label>
+                <div className='hash-pill'>{result.docHash}</div>
+              </div>
+              <div className='field'>
+                <label>Trạng thái</label>
+                <div className='badge-soft'>{result.status === 'PENDING' ? 'Chờ duyệt' : result.status}</div>
               </div>
 
               <ul className='history-list'>
-                <li>- Hash được tính từ file đã watermark.</li>
-                <li>- Chia sẻ link verify để người nhận kiểm tra tức thời.</li>
-                <li>- Dùng chức năng thu hồi nếu phát hiện sai sót.</li>
+                <li>- File đã được upload thành công.</li>
+                <li>- File đang chờ admin duyệt và cấp phát.</li>
+                <li>- Bạn có thể xem lịch sử upload trong mục "Quản lý".</li>
               </ul>
-
-              <QRViewer value={result.verifyUrl} />
-
-              <div className='card-footer'>
-                <a href={result.verifyUrl} target='_blank' rel='noreferrer' className='btn btn-outline'>Mở trang verify</a>
-                <button className='btn btn-ghost' onClick={doRevoke} disabled={isLoading}>
-                  {isLoading ? 'Đang xử lý...' : 'Thu hồi chứng chỉ'}
-                </button>
-              </div>
             </>
           ) : (
             <ul className='history-list'>
               <li>- Bước 1: Chọn file chứng chỉ (PDF, JPG, PNG).</li>
-              <li>- Bước 2: Nhập thông tin người nhận và ngày cấp.</li>
-              <li>- Bước 3: Kiểm tra hash và chia sẻ đường dẫn verify.</li>
+              <li>- Bước 2: Nhập thông tin người nhận và văn bằng.</li>
+              <li>- Bước 3: Upload file và chờ admin duyệt.</li>
+              <li>- Bước 4: Nhận chứng chỉ sau khi admin duyệt.</li>
             </ul>
           )}
         </section>

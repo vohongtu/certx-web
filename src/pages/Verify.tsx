@@ -131,7 +131,7 @@ export default function Verify() {
         <div>
           <div className='page-eyebrow'>Verification Portal</div>
           <h1 className='page-title'>Tra cứu chứng chỉ CertX</h1>
-          <p className='page-subtitle'>Nhập hash được cấp phát để xác thực trạng thái chứng chỉ và tải về bản có watermark.</p>
+          <p className='page-subtitle'>Nhập hash được cấp phát để xác thực trạng thái chứng chỉ và xem bản có watermark.</p>
         </div>
         {res?.status && <StatusBadge status={res.status} />}
       </div>
@@ -181,7 +181,6 @@ export default function Verify() {
 
                 {file && (
                   <div className='card-footer' style={{ justifyContent: 'flex-start' }}>
-                    <a className='btn btn-outline' href={file.url} download='certificate'>Tải file chứng chỉ</a>
                     {res.metadataUri && (
                       <a className='btn btn-ghost' href={res.metadataUri} target='_blank' rel='noreferrer'>Mở metadata</a>
                     )}

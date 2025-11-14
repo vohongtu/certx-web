@@ -6,6 +6,7 @@ import { useAuth } from "../hooks/useAuth"
 export default function Login() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [err, setErr] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const nav = useNavigate()
@@ -50,13 +51,46 @@ export default function Login() {
           </div>
           <div className="field">
             <label>Mật khẩu</label>
+            <div style={{ position: 'relative' }}>
             <input
-              type="password"
+                type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
+                style={{ paddingRight: '45px' }}
             />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '6px 10px',
+                  color: '#64748b',
+                  fontSize: '13px',
+                  fontWeight: '500',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'color 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#2563eb'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#64748b'
+                }}
+                title={showPassword ? 'Ẩn mật khẩu' : 'Hiển thị mật khẩu'}
+              >
+                {showPassword ? 'Ẩn' : 'Hiện'}
+              </button>
+            </div>
           </div>
           <button type="submit" className="btn btn-primary" disabled={isLoading}>
             {isLoading ? "Đang đăng nhập..." : "Đăng nhập"}

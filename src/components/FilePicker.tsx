@@ -74,7 +74,7 @@ export default function FilePicker({ onPick, file, onError }: Props) {
 
       <div className="upload-details">
         <span className="upload-title">{file ? 'Đã chọn file' : 'Chọn hoặc kéo-thả chứng chỉ'}</span>
-        <span className="upload-note">
+        <span className="upload-note" title={file ? `${file.name} • ${formatBytes(file.size)}` : undefined}>
           {file
             ? `${file.name} • ${formatBytes(file.size)}`
             : 'Hỗ trợ PDF, JPG, PNG. Tối đa 5MB.'}
