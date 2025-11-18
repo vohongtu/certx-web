@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { verifyHash, CertStatus } from '../api/certs.api'
 import StatusBadge from '../components/StatusBadge'
+import PdfViewer from '../components/PdfViewer'
 import { getCertIPFSData } from '../api/ipfs.api'
 import CertIPFS from '../interfaces/cert.interface'
 import { formatDateShort, formatDateRange } from '../utils/format'
 import { calculateStatus } from '../utils/status'
+import { useAuth } from '../hooks/useAuth'
+import { decodeJwt } from '../utils/jwt'
 
 type VerifyResult = {
   status: CertStatus | 'NOT_FOUND'
@@ -15,12 +18,23 @@ type VerifyResult = {
 
 export default function Verify() {
   const [sp] = useSearchParams()
+  const { token } = useAuth()
   const [hash, setHash] = useState(sp.get('hash') || '')
   const [res, setRes] = useState<VerifyResult | null>(null)
-  const [file, setFile] = useState<{ url: string; mimeType: string } | null>(null)
+  const [file, setFile] = useState<{ url: string; mimeType: string; blob?: Blob } | null>(null)
   const [source, setSource] = useState<'chain' | 'db' | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
+
+  // Kiểm tra role của user
+  const userRole = useMemo(() => {
+    if (!token) return null
+    const decoded = decodeJwt(token)
+    return (decoded as any)?.role || null
+  }, [token])
+
+  const isAdmin = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN'
 
   useEffect(() => {
     return () => {
@@ -63,8 +77,9 @@ export default function Verify() {
         const mimeType = data.mimeType || 'application/pdf'
         const normalized = Uint8Array.from(uint8Array)
         const blob = new Blob([normalized], { type: mimeType })
+        // Tạo URL cho image, giữ Blob cho PDF để truyền trực tiếp
         const url = URL.createObjectURL(blob)
-        setFile({ url, mimeType })
+        setFile({ url, mimeType, blob: mimeType.startsWith('image/') ? undefined : blob })
       }
 
       setRes({ status: finalStatus, data, metadataUri })
@@ -84,43 +99,21 @@ export default function Verify() {
     doVerify()
   }
 
-  const renderPreview = () => {
-    if (!file) {
-      return <p>Chưa có file để xem trước.</p>
-    }
-
-    if (file.mimeType.startsWith('image/')) {
-      return <img src={file.url} alt='Certificate preview' />
-    }
-
-    return <iframe src={file.url} title='Certificate preview' />
-  }
-
   const infoList = res?.data
     ? [
         { label: 'Họ tên', value: res.data.holderName },
         { label: 'Văn bằng', value: res.data.degree },
         { label: 'Ngày cấp - Ngày hết hạn', value: formatDateRange(res.data.issuedDate, res.data.expirationDate) },
         { label: 'Ngày xác thực', value: formatDateShort(res.data.certxIssuedDate) },
-        { label: 'Đơn vị cấp', value: res.data.issuerName },
-        { label: 'Hash (đã watermark)', value: res.data.docHash },
-        res.data.hashBeforeWatermark
-          ? { label: 'Hash (trước watermark)', value: res.data.hashBeforeWatermark }
-          : null,
+        { 
+          label: 'Đơn vị cấp', 
+          value: `CertX - ${res.data.approvedBy || res.data.issuerId || 'N/A'}` 
+        },
         res.data.watermarkOriginalText
           ? { label: 'Chuỗi watermark gốc', value: res.data.watermarkOriginalText }
           : null,
-        typeof res.data.watermarkApplied !== 'undefined'
-          ? {
-              label: 'Watermark',
-              value: `${res.data.watermarkApplied ? 'Đã áp dụng' : 'Chưa áp dụng'} • opacity ${res.data.watermarkOpacity ?? 'N/A'} • màu ${res.data.watermarkColor ?? 'N/A'} • lặp ${res.data.watermarkRepeat ?? 'N/A'} • margin ${res.data.watermarkMargin ?? 'N/A'}`,
-            }
-          : null,
         res.data.watermarkFontPath
           ? { label: 'Font watermark', value: res.data.watermarkFontPath }
-          : null,
-        typeof res.data.watermarkUsedCustomFont !== 'undefined'
-          ? { label: 'Dùng font tùy chỉnh', value: res.data.watermarkUsedCustomFont ? 'Có' : 'Không' }
           : null,
       ].filter(Boolean) as Array<{ label: string; value: string }>
     : []
@@ -131,9 +124,8 @@ export default function Verify() {
         <div>
           <div className='page-eyebrow'>Verification Portal</div>
           <h1 className='page-title'>Tra cứu chứng chỉ CertX</h1>
-          <p className='page-subtitle'>Nhập hash được cấp phát để xác thực trạng thái chứng chỉ và xem bản có watermark.</p>
+          <p className='page-subtitle'>Nhập hash được cấp phát để xác thực trạng thái và xem chứng chỉ.</p>
         </div>
-        {res?.status && <StatusBadge status={res.status} />}
       </div>
 
       <form className='card card--subtle' onSubmit={handleSubmit}>
@@ -171,6 +163,13 @@ export default function Verify() {
                 )}
 
                 <ul className='meta-list'>
+                  {/* Hiển thị StatusBadge nổi bật ở đầu danh sách */}
+                  <li className='meta-item' style={{ borderBottom: '2px solid #e5e7eb', paddingBottom: '16px', marginBottom: '12px' }}>
+                    <span className='meta-label'>Trạng thái</span>
+                    <span className='meta-value'>
+                      <StatusBadge status={res.status} />
+                    </span>
+                  </li>
                   {infoList.map((item) => (
                     <li key={item.label} className='meta-item'>
                       <span className='meta-label'>{item.label}</span>
@@ -179,7 +178,7 @@ export default function Verify() {
                   ))}
                 </ul>
 
-                {file && (
+                {file && isAdmin && (
                   <div className='card-footer' style={{ justifyContent: 'flex-start' }}>
                     {res.metadataUri && (
                       <a className='btn btn-ghost' href={res.metadataUri} target='_blank' rel='noreferrer'>Mở metadata</a>
@@ -200,10 +199,163 @@ export default function Verify() {
         <section className='card'>
           <header className='card-header'>
             <h2 className='card-title'>Xem trước chứng chỉ</h2>
-            <p className='card-subtitle'>Bản được hiển thị đã bao gồm watermark do CertX chèn vào.</p>
+            <p className='card-subtitle'>Bản được hiển thị chỉ là bản xem trước, hãy kiểm tra thông tin trên chứng chỉ để đảm bảo tính hợp lệ.</p>
           </header>
-          <div className='preview-surface'>{renderPreview()}</div>
+          
+          {file ? (
+            <>
+              {file.mimeType.startsWith('image/') ? (
+                <div className='preview-surface' style={{ 
+                  minHeight: '300px', 
+                  maxHeight: '400px', 
+                  overflow: 'auto',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  padding: '16px',
+                  background: '#f9fafb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '16px'
+                }}>
+                  <img 
+                    src={file.url} 
+                    alt='Certificate preview' 
+                    style={{ 
+                      maxWidth: '100%', 
+                      maxHeight: '350px', 
+                      objectFit: 'contain',
+                      borderRadius: '4px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }} 
+                  />
+                </div>
+              ) : (
+                <div style={{ 
+                  minHeight: '400px',
+                  maxHeight: '500px',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  marginBottom: '16px'
+                }}>
+                  <PdfViewer 
+                    file={file.blob || file.url} 
+                    initialMode="fit"
+                    showControls={false}
+                  />
+                </div>
+              )}
+              <div className='card-footer' style={{ justifyContent: 'center' }}>
+                <button
+                  className='btn btn-primary'
+                  onClick={() => setShowPreviewModal(true)}
+                >
+                  Xem chứng chỉ
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className='preview-surface' style={{ 
+              minHeight: '300px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              color: '#999'
+            }}>
+              <p>Chưa có file để xem trước.</p>
+            </div>
+          )}
         </section>
+
+        {/* Modal xem chứng chỉ lớn */}
+        {showPreviewModal && file && (
+          <div 
+            className='modal-overlay' 
+            onClick={() => setShowPreviewModal(false)}
+            style={{ zIndex: 2000 }}
+          >
+            <div 
+              className='modal' 
+              onClick={(e) => e.stopPropagation()}
+              style={{ 
+                maxWidth: '95vw', 
+                width: '1200px',
+                height: '90vh',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                padding: 0
+              }}
+            >
+              <div className='modal-header' style={{ flexShrink: 0, padding: '20px 24px' }}>
+                <div>
+                  <h3 style={{ margin: 0, marginBottom: '4px' }}>Chứng chỉ</h3>
+                  {res?.data && (
+                    <p style={{ margin: 0, fontSize: '14px', color: '#666' }}>
+                      {res.data.holderName} • {res.data.degree}
+                    </p>
+                  )}
+                </div>
+                <button 
+                  className='modal-close-btn' 
+                  onClick={() => setShowPreviewModal(false)}
+                  style={{ fontSize: '28px' }}
+                >
+                  ×
+                </button>
+              </div>
+              <div 
+                className='modal-body' 
+                style={{ 
+                  flex: 1,
+                  overflow: 'hidden',
+                  padding: '0',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  background: '#f9fafb',
+                  minHeight: 0
+                }}
+              >
+                {file.mimeType.startsWith('image/') ? (
+                  <div style={{
+                    flex: 1,
+                    overflow: 'auto',
+                    padding: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: '#f9fafb'
+                  }}>
+                    <img 
+                      src={file.url} 
+                      alt='Certificate' 
+                      style={{ 
+                        maxWidth: '100%', 
+                        maxHeight: '100%', 
+                        objectFit: 'contain',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                        background: '#fff',
+                        padding: '8px'
+                      }} 
+                    />
+                  </div>
+                ) : (
+                  <PdfViewer file={file.blob || file.url} initialMode="fit" />
+                )}
+              </div>
+              <div className='modal-actions' style={{ flexShrink: 0, padding: '16px 24px' }}>
+                <button
+                  className='btn btn-ghost'
+                  onClick={() => setShowPreviewModal(false)}
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

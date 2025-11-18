@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, type MouseEvent } from 'react'
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { decodeJwt } from '../utils/jwt'
@@ -76,7 +76,7 @@ export default function Header() {
 
   // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (event: globalThis.MouseEvent) => {
       const target = event.target as HTMLElement
       if (isAdminDropdownOpen && !target.closest('.admin-dropdown')) {
         setIsAdminDropdownOpen(false)
@@ -116,12 +116,12 @@ export default function Header() {
 
         {/* Desktop navigation */}
         <nav className='nav-links desktop-nav'>
-          <NavLink to='/verify' className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>Tra cứu</NavLink>
-          {token && (
-            <NavLink to='/issue' className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>Upload</NavLink>
+          <NavLink to='/verify' className={({ isActive }: { isActive: boolean }) => (isActive ? 'nav-link active' : 'nav-link')}>Tra cứu</NavLink>
+          {token && !isAdmin && (
+            <NavLink to='/issue' className={({ isActive }: { isActive: boolean }) => (isActive ? 'nav-link active' : 'nav-link')}>Upload</NavLink>
           )}
           {token && (
-            <NavLink to='/manage' className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>Lịch sử</NavLink>
+            <NavLink to='/manage' className={({ isActive }: { isActive: boolean }) => (isActive ? 'nav-link active' : 'nav-link')}>Lịch sử</NavLink>
           )}
           {isAdmin && (
             <div className='admin-dropdown' style={{ position: 'relative' }}>
@@ -155,10 +155,9 @@ export default function Header() {
                   overflow: 'hidden'
                 }}>
                   <NavLink
-                    to='/admin'
-                    className={({ isActive }) => ''}
+                    to='/admin/issue'
                     onClick={() => setIsAdminDropdownOpen(false)}
-                    style={({ isActive }) => ({
+                    style={({ isActive }: { isActive: boolean }) => ({
                       display: 'block',
                       padding: '12px 16px',
                       textDecoration: 'none',
@@ -168,12 +167,36 @@ export default function Header() {
                       fontWeight: isActive ? '600' : '400',
                       transition: 'background-color 0.2s'
                     })}
-                    onMouseEnter={(e) => {
+                    onMouseEnter={(e: MouseEvent<HTMLAnchorElement>) => {
+                      if (location.pathname !== '/admin/issue') {
+                        e.currentTarget.style.background = '#f9fafb'
+                      }
+                    }}
+                    onMouseLeave={(e: MouseEvent<HTMLAnchorElement>) => {
+                      e.currentTarget.style.background = location.pathname === '/admin/issue' ? '#eff6ff' : 'white'
+                    }}
+                  >
+                    Cấp phát chứng chỉ
+                  </NavLink>
+                  <NavLink
+                    to='/admin'
+                    onClick={() => setIsAdminDropdownOpen(false)}
+                    style={({ isActive }: { isActive: boolean }) => ({
+                      display: 'block',
+                      padding: '12px 16px',
+                      textDecoration: 'none',
+                      color: isActive ? '#2563eb' : '#374151',
+                      background: isActive ? '#eff6ff' : 'white',
+                      borderBottom: '1px solid #f3f4f6',
+                      fontWeight: isActive ? '600' : '400',
+                      transition: 'background-color 0.2s'
+                    })}
+                    onMouseEnter={(e: MouseEvent<HTMLAnchorElement>) => {
                       if (location.pathname !== '/admin') {
                         e.currentTarget.style.background = '#f9fafb'
                       }
                     }}
-                    onMouseLeave={(e) => {
+                    onMouseLeave={(e: MouseEvent<HTMLAnchorElement>) => {
                       e.currentTarget.style.background = location.pathname === '/admin' ? '#eff6ff' : 'white'
                     }}
                   >
@@ -181,9 +204,8 @@ export default function Header() {
                   </NavLink>
                   <NavLink
                     to='/admin/users'
-                    className={({ isActive }) => ''}
                     onClick={() => setIsAdminDropdownOpen(false)}
-                    style={({ isActive }) => ({
+                    style={({ isActive }: { isActive: boolean }) => ({
                       display: 'block',
                       padding: '12px 16px',
                       textDecoration: 'none',
@@ -193,12 +215,12 @@ export default function Header() {
                       fontWeight: isActive ? '600' : '400',
                       transition: 'background-color 0.2s'
                     })}
-                    onMouseEnter={(e) => {
+                    onMouseEnter={(e: MouseEvent<HTMLAnchorElement>) => {
                       if (location.pathname !== '/admin/users') {
                         e.currentTarget.style.background = '#f9fafb'
                       }
                     }}
-                    onMouseLeave={(e) => {
+                    onMouseLeave={(e: MouseEvent<HTMLAnchorElement>) => {
                       e.currentTarget.style.background = location.pathname === '/admin/users' ? '#eff6ff' : 'white'
                     }}
                   >
@@ -206,28 +228,53 @@ export default function Header() {
                   </NavLink>
                   <NavLink
                     to='/admin/credentials'
-                    className={({ isActive }) => ''}
                     onClick={() => setIsAdminDropdownOpen(false)}
-                    style={({ isActive }) => ({
+                    style={({ isActive }: { isActive: boolean }) => ({
                       display: 'block',
                       padding: '12px 16px',
                       textDecoration: 'none',
                       color: isActive ? '#2563eb' : '#374151',
                       background: isActive ? '#eff6ff' : 'white',
+                      borderBottom: '1px solid #f3f4f6',
                       fontWeight: isActive ? '600' : '400',
                       transition: 'background-color 0.2s'
                     })}
-                    onMouseEnter={(e) => {
+                    onMouseEnter={(e: MouseEvent<HTMLAnchorElement>) => {
                       if (location.pathname !== '/admin/credentials') {
                         e.currentTarget.style.background = '#f9fafb'
                       }
                     }}
-                    onMouseLeave={(e) => {
+                    onMouseLeave={(e: MouseEvent<HTMLAnchorElement>) => {
                       e.currentTarget.style.background = location.pathname === '/admin/credentials' ? '#eff6ff' : 'white'
                     }}
                   >
                     Quản lý văn bằng
                   </NavLink>
+                  {userRole === 'SUPER_ADMIN' && (
+                    <NavLink
+                      to='/admin/audit'
+                      onClick={() => setIsAdminDropdownOpen(false)}
+                      style={({ isActive }: { isActive: boolean }) => ({
+                        display: 'block',
+                        padding: '12px 16px',
+                        textDecoration: 'none',
+                        color: isActive ? '#2563eb' : '#374151',
+                        background: isActive ? '#eff6ff' : 'white',
+                        fontWeight: isActive ? '600' : '400',
+                        transition: 'background-color 0.2s'
+                      })}
+                      onMouseEnter={(e: MouseEvent<HTMLAnchorElement>) => {
+                        if (location.pathname !== '/admin/audit') {
+                          e.currentTarget.style.background = '#f9fafb'
+                        }
+                      }}
+                      onMouseLeave={(e: MouseEvent<HTMLAnchorElement>) => {
+                        e.currentTarget.style.background = location.pathname === '/admin/audit' ? '#eff6ff' : 'white'
+                      }}
+                    >
+                      Audit Log
+                    </NavLink>
+                  )}
                 </div>
               )}
             </div>
@@ -258,16 +305,16 @@ export default function Header() {
         <div className='mobile-menu-overlay' onClick={() => setIsMenuOpen(false)}>
           <div className='mobile-menu' onClick={(e) => e.stopPropagation()}>
             <nav className='mobile-nav-links'>
-              <NavLink to='/verify' className={({ isActive }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick}>
+              <NavLink to='/verify' className={({ isActive }: { isActive: boolean }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick}>
                 Tra cứu
               </NavLink>
-              {token && (
-                <NavLink to='/issue' className={({ isActive }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick}>
+              {token && !isAdmin && (
+                <NavLink to='/issue' className={({ isActive }: { isActive: boolean }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick}>
                   Upload
                 </NavLink>
               )}
               {token && (
-                <NavLink to='/manage' className={({ isActive }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick}>
+                <NavLink to='/manage' className={({ isActive }: { isActive: boolean }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick}>
                   Lịch sử
                 </NavLink>
               )}
@@ -276,15 +323,23 @@ export default function Header() {
                   <div style={{ padding: '8px 16px', fontSize: '14px', fontWeight: '600', color: '#6b7280', borderBottom: '1px solid #e5e7eb' }}>
                     Admin
                   </div>
-                  <NavLink to='/admin' className={({ isActive }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick} style={{ paddingLeft: '32px' }}>
+                  <NavLink to='/admin/issue' className={({ isActive }: { isActive: boolean }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick} style={{ paddingLeft: '32px' }}>
+                    Cấp phát chứng chỉ
+                  </NavLink>
+                  <NavLink to='/admin' className={({ isActive }: { isActive: boolean }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick} style={{ paddingLeft: '32px' }}>
                     Quản lý chứng chỉ
                   </NavLink>
-                  <NavLink to='/admin/users' className={({ isActive }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick} style={{ paddingLeft: '32px' }}>
+                  <NavLink to='/admin/users' className={({ isActive }: { isActive: boolean }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick} style={{ paddingLeft: '32px' }}>
                     Quản lý người dùng
                   </NavLink>
-                  <NavLink to='/admin/credentials' className={({ isActive }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick} style={{ paddingLeft: '32px' }}>
+                  <NavLink to='/admin/credentials' className={({ isActive }: { isActive: boolean }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick} style={{ paddingLeft: '32px' }}>
                     Quản lý văn bằng
                   </NavLink>
+                  {userRole === 'SUPER_ADMIN' && (
+                    <NavLink to='/admin/audit' className={({ isActive }: { isActive: boolean }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick} style={{ paddingLeft: '32px' }}>
+                      Audit Log
+                    </NavLink>
+                  )}
                 </>
               )}
             </nav>

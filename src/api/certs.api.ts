@@ -303,6 +303,20 @@ export async function revokeCertByAdmin(id: string) {
   }
 }
 
+// Super admin chuyển người nhận chứng chỉ
+export async function transferCertificate(id: string, newUserId: string, note: string, holderName?: string) {
+  try {
+    const { data } = await client.post(`/certs/${id}/transfer`, {
+      newUserId,
+      note,
+      holderName: holderName || undefined
+    })
+    return data as { ok: boolean; message: string; cert: CertSummary }
+  } catch (error: any) {
+    throw new Error(formatErrorMessage(error))
+  }
+}
+
 // Admin preview cert file - fetch file và tạo blob URL
 export async function getPreviewBlobUrl(id: string): Promise<string> {
   try {

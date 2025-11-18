@@ -24,35 +24,69 @@ export default function DocumentTypeSelector({
   const [error, setError] = useState<string | null>(null)
   const [selectedType, setSelectedType] = useState<CredentialType | null>(null)
   const [customDegree, setCustomDegree] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const [totalItems, setTotalItems] = useState(0)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
-  const loadDocumentTypes = useCallback(async () => {
+  const loadDocumentTypes = useCallback(async (searchQuery?: string, page: number = 1, append: boolean = false) => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await listCredentialTypes() // Load tất cả, không truyền search
-      setAllDocumentTypes(response.items)
-      setDocumentTypes(response.items) // Hiển thị tất cả ban đầu
+      // Load với limit lớn để lấy nhiều items
+      const response = await listCredentialTypes({ 
+        q: searchQuery || undefined,
+        page,
+        limit: 100 // Load 100 items mỗi lần
+      })
+      
+      setTotalItems(response.total || 0)
+      setHasMore(page < (response.pagination?.totalPages || 1))
+      
+      if (page === 1 || !append) {
+        // Trang đầu tiên hoặc không append - replace toàn bộ
+        setAllDocumentTypes(response.items)
+        setDocumentTypes(response.items)
+        setCurrentPage(1)
+      } else {
+        // Trang tiếp theo - append vào danh sách
+        setAllDocumentTypes(prev => [...prev, ...response.items])
+        setDocumentTypes(prev => [...prev, ...response.items])
+      }
+      
+      setCurrentPage(page)
+      return response
     } catch (error: any) {
       console.error('Error loading credential types:', error)
       setError(error.message || 'Không thể tải danh sách loại văn bằng')
-      setAllDocumentTypes([])
-      setDocumentTypes([])
+      if (!append) {
+        setAllDocumentTypes([])
+        setDocumentTypes([])
+      }
+      return null
     } finally {
       setIsLoading(false)
     }
   }, [])
 
-  // Load tất cả document types khi mở modal
+  // Load tất cả document types khi mở modal (delay để tránh giật)
   useEffect(() => {
     if (showModal) {
       setSearchText('') // Reset search khi mở modal
-      loadDocumentTypes() // Load tất cả, không cần search
+      setCurrentPage(1)
+      setHasMore(true)
+      // Delay nhỏ để modal render xong trước khi load data (tránh giật)
+      const loadTimer = setTimeout(() => {
+        loadDocumentTypes(undefined, 1, false) // Load trang đầu tiên
+      }, 150)
       // Focus vào input search sau khi modal mở
       setTimeout(() => {
         searchInputRef.current?.focus()
-      }, 100)
+      }, 200)
+      
+      return () => clearTimeout(loadTimer)
     }
   }, [showModal, loadDocumentTypes])
 
@@ -70,38 +104,37 @@ export default function DocumentTypeSelector({
     }
   }, [value, allDocumentTypes])
 
-
-  // Hàm loại bỏ dấu tiếng Việt
-  const removeVietnameseTones = (str: string): string => {
-    return str
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/đ/g, 'd')
-      .replace(/Đ/g, 'D')
-      .toLowerCase()
-  }
-
-  // Filter document types khi search text thay đổi
+  // Debounce search và gọi API khi search text thay đổi
   useEffect(() => {
-    if (showModal) {
+    if (!showModal) return
+    
+    const timer = setTimeout(() => {
       if (searchText && searchText.trim()) {
-        // Filter danh sách đã load - hỗ trợ search không dấu
-        const searchTerm = removeVietnameseTones(searchText.trim())
-        const filtered = allDocumentTypes.filter(dt => {
-          const nameNormalized = removeVietnameseTones(dt.name)
-          const nameOriginal = dt.name.toLowerCase()
-          const searchLower = searchText.toLowerCase().trim()
-          
-          // Tìm kiếm theo cả tên có dấu và không dấu
-          return nameNormalized.includes(searchTerm) || nameOriginal.includes(searchLower)
-        })
-        setDocumentTypes(filtered)
+        // Gọi API với search query để search trên backend
+        setCurrentPage(1)
+        setHasMore(true)
+        loadDocumentTypes(searchText.trim(), 1, false)
       } else {
-        // Hiển thị tất cả nếu không có search
-        setDocumentTypes(allDocumentTypes)
+        // Nếu không có search, reload tất cả
+        setCurrentPage(1)
+        setHasMore(true)
+        loadDocumentTypes(undefined, 1, false)
       }
+    }, 300) // Debounce 300ms
+    
+    return () => clearTimeout(timer)
+  }, [searchText, showModal, loadDocumentTypes])
+  
+  // Infinite scroll handler
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget
+    const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight
+    
+    // Load thêm khi scroll gần đến cuối (50px)
+    if (scrollBottom < 50 && hasMore && !isLoading && !searchText) {
+      loadDocumentTypes(undefined, currentPage + 1, true)
     }
-  }, [searchText, showModal, allDocumentTypes])
+  }, [hasMore, isLoading, searchText, currentPage, loadDocumentTypes])
 
   const handleSelect = (docType: CredentialType) => {
     setSelectedType(docType)
@@ -190,10 +223,17 @@ export default function DocumentTypeSelector({
           <div
             ref={modalRef}
             className="modal"
-            style={{ maxWidth: '600px', width: '90vw', maxHeight: '80vh' }}
+            style={{ 
+              maxWidth: '600px', 
+              width: '90vw', 
+              height: '800px', // Fixed height để tránh giật, đủ để hiển thị 5 văn bằng
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="modal-header">
+            <div className="modal-header" style={{ flexShrink: 0 }}>
               <h3>Chọn loại văn bằng/chứng chỉ</h3>
               <button
                 className="modal-close-btn"
@@ -205,9 +245,16 @@ export default function DocumentTypeSelector({
                 ×
               </button>
             </div>
-            <div className="modal-body" style={{ padding: '16px' }}>
-              {/* Search input */}
-              <div style={{ marginBottom: '16px' }}>
+            <div className="modal-body" style={{ 
+              padding: '16px',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              minHeight: 0
+            }}>
+              {/* Search input - Fixed height */}
+              <div style={{ marginBottom: '16px', flexShrink: 0 }}>
                 <input
                   ref={searchInputRef}
                   type="text"
@@ -224,7 +271,7 @@ export default function DocumentTypeSelector({
                 />
               </div>
 
-              {/* Error state */}
+              {/* Error state - Fixed height */}
               {error && (
                 <div style={{ 
                   padding: '12px', 
@@ -232,36 +279,64 @@ export default function DocumentTypeSelector({
                   border: '1px solid #fecaca', 
                   borderRadius: '4px', 
                   color: '#dc2626',
-                  marginBottom: '16px'
+                  marginBottom: '16px',
+                  flexShrink: 0
                 }}>
                   ⚠️ {error}
                 </div>
               )}
 
-              {/* Loading state */}
-              {isLoading && (
-                <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                  Đang tải...
-                </div>
-              )}
+              {/* Content area - Flexible, fixed height container */}
+              <div style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                minHeight: 0,
+                overflow: 'hidden'
+              }}>
+                {/* Loading state */}
+                {isLoading && documentTypes.length === 0 && (
+                  <div style={{ 
+                    textAlign: 'center', 
+                    padding: '20px', 
+                    color: '#999',
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    Đang tải...
+                  </div>
+                )}
 
-              {/* Empty state khi không có dữ liệu và không loading */}
-              {!isLoading && !error && allDocumentTypes.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                  Chưa có dữ liệu loại văn bằng. Vui lòng chạy seed script.
-                </div>
-              )}
+                {/* Empty state khi không có dữ liệu và không loading và không search */}
+                {!isLoading && !error && !searchText && documentTypes.length === 0 && (
+                  <div style={{ 
+                    textAlign: 'center', 
+                    padding: '20px', 
+                    color: '#999',
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    Chưa có dữ liệu loại văn bằng. Vui lòng chạy seed script.
+                  </div>
+                )}
 
-              {/* Document types list */}
-              {!isLoading && !error && documentTypes.length > 0 && (
-                <div
-                  style={{
-                    maxHeight: '400px',
-                    overflowY: 'auto',
-                    border: '1px solid #eee',
-                    borderRadius: '4px'
-                  }}
-                >
+                {/* Document types list - Fixed height container */}
+                {!isLoading && !error && documentTypes.length > 0 && (
+                  <div
+                    ref={listRef}
+                    onScroll={handleScroll}
+                    style={{
+                      flex: 1,
+                      overflowY: 'auto',
+                      border: '1px solid #eee',
+                      borderRadius: '4px',
+                      minHeight: 0
+                    }}
+                  >
                   {documentTypes.map((docType) => (
                     <div
                       key={docType.id}
@@ -299,19 +374,57 @@ export default function DocumentTypeSelector({
                       )}
                     </div>
                   ))}
-                </div>
-              )}
+                  
+                  {/* Loading indicator khi load thêm */}
+                  {isLoading && documentTypes.length > 0 && (
+                    <div style={{ textAlign: 'center', padding: '12px', color: '#999', fontSize: '14px' }}>
+                      Đang tải thêm...
+                    </div>
+                  )}
+                  </div>
+                )}
 
-              {/* No results khi search */}
-              {!isLoading && !error && searchText && allDocumentTypes.length > 0 && documentTypes.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                  Không tìm thấy kết quả cho "{searchText}"
-                </div>
-              )}
+                {/* Thông tin số lượng - Đặt ở dưới cùng của content area */}
+                {!isLoading && !error && documentTypes.length > 0 && (
+                  <div style={{ 
+                    textAlign: 'center', 
+                    padding: '12px', 
+                    color: '#666', 
+                    fontSize: '12px',
+                    borderTop: '1px solid #eee',
+                    background: '#f9fafb',
+                    flexShrink: 0,
+                    marginTop: '8px'
+                  }}>
+                    Hiển thị {documentTypes.length} / {totalItems} loại văn bằng
+                    {hasMore && !searchText && ' (cuộn xuống để xem thêm)'}
+                  </div>
+                )}
 
-              {/* Custom input option */}
+                {/* No results khi search */}
+                {!isLoading && !error && searchText && documentTypes.length === 0 && (
+                  <div style={{ 
+                    textAlign: 'center', 
+                    padding: '20px', 
+                    color: '#999',
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    Không tìm thấy kết quả cho "{searchText}"
+                  </div>
+                )}
+              </div>
+
+              {/* Custom input option - Fixed at bottom */}
               {allowCustom && (
-                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #eee' }}>
+                <div style={{ 
+                  marginTop: '16px', 
+                  paddingTop: '16px', 
+                  borderTop: '1px solid #eee',
+                  flexShrink: 0
+                }}>
                   <div style={{ marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>
                     Hoặc nhập tùy chỉnh:
                   </div>
@@ -346,7 +459,7 @@ export default function DocumentTypeSelector({
                 </div>
               )}
             </div>
-            <div className="modal-actions">
+            <div className="modal-actions" style={{ flexShrink: 0 }}>
               <button
                 className="btn btn-ghost"
                 onClick={() => {

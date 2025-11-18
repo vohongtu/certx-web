@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import { IconPencil, IconTrash, IconCircleCheck, IconCircleX } from '@tabler/icons-react'
 import IconButton from '../components/IconButton'
+import { getIconColor } from '../utils/iconColors'
 import { UserSummary, UserListResponse, listUsers, createUser, updateUser, deleteUser, UserRole } from '../api/users.api'
 import { useAuth } from '../hooks/useAuth'
 import { decodeJwt } from '../utils/jwt'
@@ -30,6 +32,8 @@ export default function UserManage() {
   const [userError, setUserError] = useState<string | null>(null)
   const [showUserModal, setShowUserModal] = useState(false)
   const [editingUser, setEditingUser] = useState<UserSummary | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null)
   const [userForm, setUserForm] = useState({ email: '', password: '', name: '', address: '', role: 'USER' as UserRole, enabled: true })
 
   // Fetch users
@@ -66,15 +70,30 @@ export default function UserManage() {
     return () => clearTimeout(timer)
   }, [userSearchText])
 
+  // Toggle enabled status
+  const handleToggleEnabled = async (userId: string, currentEnabled: boolean) => {
+    setTogglingUserId(userId)
+    try {
+      await updateUser(userId, { enabled: !currentEnabled })
+      // Refresh danh sách
+      await fetchUsers(userPagination.page, userLimit)
+    } catch (err: any) {
+      alert(err.message || 'Không thể cập nhật trạng thái user')
+    } finally {
+      setTogglingUserId(null)
+    }
+  }
+
   // Create/Update user
   const handleSaveUser = async () => {
+    // Validate: Nếu tạo ADMIN hoặc SUPER_ADMIN thì phải có address
+    if (!editingUser && (userForm.role === 'ADMIN' || userForm.role === 'SUPER_ADMIN') && !userForm.address.trim()) {
+      alert(`Tài khoản ${userForm.role === 'SUPER_ADMIN' ? 'super admin' : 'admin'} cần có địa chỉ ETH`)
+      return
+    }
+    
+    setIsSaving(true)
     try {
-      // Validate: Nếu tạo ADMIN hoặc SUPER_ADMIN thì phải có address
-      if (!editingUser && (userForm.role === 'ADMIN' || userForm.role === 'SUPER_ADMIN') && !userForm.address.trim()) {
-        alert(`Tài khoản ${userForm.role === 'SUPER_ADMIN' ? 'super admin' : 'admin'} cần có địa chỉ ETH`)
-        return
-      }
-      
       if (editingUser) {
         await updateUser(editingUser.id, userForm)
       } else {
@@ -84,23 +103,29 @@ export default function UserManage() {
           : userForm
         await createUser(userData)
       }
+      
       // Reset form và đóng modal
-      const resetForm = () => {
-        setEditingUser(null)
-        setUserForm({ 
-          email: '', 
-          password: '', 
-          name: '', 
-          address: '', 
-          role: 'USER', 
-          enabled: true 
-        })
-      }
-      resetForm()
+      setEditingUser(null)
+      setUserForm({ 
+        email: '', 
+        password: '', 
+        name: '', 
+        address: '', 
+        role: 'USER', 
+        enabled: true 
+      })
       setShowUserModal(false)
-      fetchUsers(userPagination.page, userLimit)
+      
+      // Refresh danh sách - nếu tạo mới, quay về trang 1 để thấy user mới
+      if (!editingUser) {
+        await fetchUsers(1, userLimit)
+      } else {
+        await fetchUsers(userPagination.page, userLimit)
+      }
     } catch (err: any) {
       alert(err.message || 'Không thể lưu user')
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -207,25 +232,64 @@ export default function UserManage() {
               <table className='data-table'>
                 <thead>
                   <tr>
-                    <th>Email</th>
-                    <th>Tên</th>
-                    <th>Role</th>
-                    <th>Trạng thái</th>
-                    <th>Hành động</th>
+                    <th style={{ textAlign: 'center' }}>Email</th>
+                    <th style={{ textAlign: 'center' }}>Tên</th>
+                    <th style={{ textAlign: 'center' }}>Role</th>
+                    <th style={{ textAlign: 'center' }}>Trạng thái</th>
+                    <th style={{ textAlign: 'center' }}>Hành động</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.map((user) => (
                     <tr key={user.id}>
-                      <td>{user.email}</td>
-                      <td>{user.name}</td>
-                      <td>{user.role}</td>
-                      <td>{user.enabled ? 'Hoạt động' : 'Đã deactive'}</td>
-                      <td>
+                      <td style={{ textAlign: 'center', padding: '8px', fontSize: '13px' }}>{user.email}</td>
+                      <td style={{ textAlign: 'center', padding: '8px', fontSize: '13px' }}>{user.name}</td>
+                      <td style={{ textAlign: 'center', padding: '8px' }}>
+                        <span 
+                          className={
+                            user.role === 'SUPER_ADMIN' ? 'role-badge role-badge--super-admin' :
+                            user.role === 'ADMIN' ? 'role-badge role-badge--admin' :
+                            user.role === 'USER' ? 'role-badge role-badge--user' :
+                            'role-badge'
+                          }
+                          style={{ fontSize: '12px', fontWeight: '600' }}
+                        >
+                          {user.role}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '8px', verticalAlign: 'middle' }}>
+                        <button
+                          onClick={() => handleToggleEnabled(user.id, user.enabled)}
+                          disabled={togglingUserId === user.id}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: togglingUserId === user.id ? 'wait' : 'pointer',
+                            padding: '0',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '24px',
+                            height: '24px',
+                            transition: 'opacity 0.2s'
+                          }}
+                          title={user.enabled ? 'Click để deactive' : 'Click để active'}
+                        >
+                          {togglingUserId === user.id ? (
+                            <span style={{ fontSize: '14px', color: '#6b7280' }}>...</span>
+                          ) : user.enabled ? (
+                            <IconCircleCheck size={24} color='#10b981' strokeWidth={2.5} />
+                          ) : (
+                            <IconCircleX size={24} color='#ef4444' strokeWidth={2.5} />
+                          )}
+                        </button>
+                      </td>
+                      <td style={{ textAlign: 'center', padding: '8px' }}>
                         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                           <IconButton
-                            icon='✏️'
+                            icon={<IconPencil size={16} />}
                             label='Sửa'
+                            iconColor={getIconColor('edit')}
                             onClick={() => { 
                               setEditingUser(user)
                               setUserForm({ 
@@ -241,8 +305,9 @@ export default function UserManage() {
                             variant='ghost'
                           />
                           <IconButton
-                            icon='🗑️'
+                            icon={<IconTrash size={16} />}
                             label='Xóa'
+                            iconColor={getIconColor('delete')}
                             onClick={() => handleDeleteUser(user.id)}
                             variant='danger'
                           />
@@ -470,11 +535,19 @@ export default function UserManage() {
                   setUserForm({ email: '', password: '', name: '', address: '', role: 'USER', enabled: true })
                   setShowUserModal(false)
                 }}
+                disabled={isSaving}
               >
                 Hủy
               </button>
-              <button className='btn btn-primary' onClick={handleSaveUser}>
-                {editingUser ? 'Cập nhật' : 'Tạo tài khoản'}
+              <button 
+                className='btn btn-primary' 
+                onClick={handleSaveUser}
+                disabled={isSaving}
+              >
+                {isSaving 
+                  ? (editingUser ? 'Đang cập nhật...' : 'Đang tạo...')
+                  : (editingUser ? 'Cập nhật' : 'Tạo tài khoản')
+                }
               </button>
             </div>
           </div>

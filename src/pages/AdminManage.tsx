@@ -1,7 +1,20 @@
 import { useState, useEffect, useMemo } from 'react'
+import { 
+  IconZoomScan, 
+  IconCircleCheck, 
+  IconCircleX, 
+  IconCertificateOff, 
+  IconClockEdit, 
+  IconShieldCheck, 
+  IconFileInfo,
+  IconUserPlus
+} from '@tabler/icons-react'
 import StatusBadge from '../components/StatusBadge'
 import IconButton from '../components/IconButton'
-import { CertSummary, CertListResponse, listPendingCerts, approveCert, rejectCert, CertStatus, updateExpirationDate, revokeCertByAdmin, getPreviewBlobUrl } from '../api/certs.api'
+import PdfViewer from '../components/PdfViewer'
+import UserSelector from '../components/UserSelector'
+import { getIconColor } from '../utils/iconColors'
+import { CertSummary, CertListResponse, listPendingCerts, approveCert, rejectCert, CertStatus, updateExpirationDate, revokeCertByAdmin, getPreviewBlobUrl, transferCertificate } from '../api/certs.api'
 import { getCredentialTypeById } from '../api/credential-types.api'
 import { listValidityOptions, CredentialValidityOption } from '../api/credential-validity-options.api'
 import { formatDateShort } from '../utils/format'
@@ -15,16 +28,15 @@ const DEFAULT_PAGE_LIMIT = 10
 
 export default function AdminManage() {
   const { token } = useAuth()
-  
+
   const currentUserInfo = useMemo(() => {
-    if (!token) return { role: null, id: null }
+    if (!token) return { role: null }
     const decoded = decodeJwt(token)
-    return { 
-      role: (decoded as any)?.role || null,
-      id: (decoded as any)?.sub || null
+    return {
+      role: (decoded as any)?.role || null
     }
   }, [token])
-  
+
   // Certs state
   const [certs, setCerts] = useState<CertSummary[]>([])
   const [certStatus, setCertStatus] = useState<'ALL' | CertStatus>('PENDING')
@@ -38,6 +50,8 @@ export default function AdminManage() {
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
   const [allowReupload, setAllowReupload] = useState(false)
+  const [showRevokeModal, setShowRevokeModal] = useState(false)
+  const [isRevoking, setIsRevoking] = useState(false)
   const [expirationDate, setExpirationDate] = useState('')
   const [showUpdateExpirationModal, setShowUpdateExpirationModal] = useState(false)
   const [certIssuedDate, setCertIssuedDate] = useState('') // Ngày cert được tạo ở cơ quan
@@ -48,13 +62,19 @@ export default function AdminManage() {
   const [isLoadingValidityOptions, setIsLoadingValidityOptions] = useState(false)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [previewCert, setPreviewCert] = useState<CertSummary | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewFile, setPreviewFile] = useState<{ url: string; mimeType: string; blob?: Blob } | null>(null)
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  const [zoomLevel, setZoomLevel] = useState(1)
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [noteContent, setNoteContent] = useState<{ type: 'rejection' | 'reupload' | 'both'; rejectionReason?: string; reuploadNote?: string } | null>(null)
   const [isApproving, setIsApproving] = useState(false)
   const [isRejecting, setIsRejecting] = useState(false)
+  const [showTransferModal, setShowTransferModal] = useState(false)
+  const [isTransferring, setIsTransferring] = useState(false)
+  const [transferNewUserId, setTransferNewUserId] = useState<string | null>(null)
+  const [transferNote, setTransferNote] = useState('')
+  const [transferHolderName, setTransferHolderName] = useState('')
 
   // Fetch certs
   const fetchCerts = async (page?: number, limit?: number, search?: string, status?: 'ALL' | CertStatus) => {
@@ -62,7 +82,7 @@ export default function AdminManage() {
     const requestedLimit = limit ?? certLimit
     const requestedSearch = search !== undefined ? search : certAppliedSearch
     const requestedStatus = status !== undefined ? status : certStatus
-    
+
     // Clear certs ngay lập tức khi filter thay đổi
     setCerts([])
     setIsLoadingCerts(true)
@@ -134,7 +154,7 @@ export default function AdminManage() {
               setValidityOptions([])
             }
           }
-          
+
           // Set ngày cert được tạo mặc định = ngày hiện tại hoặc ngày đã có (chỉ cho approve modal)
           if (showApproveModal) {
             if (selectedCert.issuedDate) {
@@ -172,48 +192,55 @@ export default function AdminManage() {
     loadValidityData()
   }, [showApproveModal, showUpdateExpirationModal, selectedCert])
 
+  // Helper function để tính expiration date từ validity option
+  const calculateExpirationDate = (): string | undefined => {
+    if (expirationDate) return expirationDate
+    if (!selectedValidityOptionId || !certIssuedDate || useCustomExpiration) return undefined
+
+    const selectedOption = validityOptions.find(opt => opt.id === selectedValidityOptionId)
+    if (!selectedOption) return undefined
+
+    const baseDate = new Date(certIssuedDate)
+    if (selectedOption.periodMonths) {
+      baseDate.setMonth(baseDate.getMonth() + selectedOption.periodMonths)
+    } else if (selectedOption.periodDays) {
+      baseDate.setDate(baseDate.getDate() + selectedOption.periodDays)
+    }
+    return baseDate.toISOString().split('T')[0]
+  }
+
+  // Helper function để reset form state
+  const resetFormState = () => {
+    setExpirationDate('')
+    setCertIssuedDate('')
+    setSelectedValidityOptionId('')
+    setUseCustomExpiration(false)
+    setValidityOptions([])
+    setIsPermanent(false)
+  }
+
   // Approve cert
   const handleApprove = async () => {
     if (!selectedCert || isApproving) return
-    
+
     // Validate: Nếu không phải vĩnh viễn, cần có expirationDate
-    if (!isPermanent && !expirationDate) {
+    if (!isPermanent && !expirationDate && !selectedValidityOptionId) {
       alert('Vui lòng chọn thời hạn hoặc nhập ngày hết hạn')
       return
     }
-    
+
     setIsApproving(true)
     try {
-      // Nếu có validity option nhưng chưa có expirationDate, tính lại
-      let finalExpirationDate = expirationDate || undefined
-      
-      if (selectedValidityOptionId && !finalExpirationDate && certIssuedDate && !useCustomExpiration) {
-        const selectedOption = validityOptions.find(opt => opt.id === selectedValidityOptionId)
-        if (selectedOption) {
-          const baseDate = new Date(certIssuedDate)
-          if (selectedOption.periodMonths) {
-            baseDate.setMonth(baseDate.getMonth() + selectedOption.periodMonths)
-            finalExpirationDate = baseDate.toISOString().split('T')[0]
-          } else if (selectedOption.periodDays) {
-            baseDate.setDate(baseDate.getDate() + selectedOption.periodDays)
-            finalExpirationDate = baseDate.toISOString().split('T')[0]
-          }
-        }
-      }
-      
+      const finalExpirationDate = calculateExpirationDate()
+
       await approveCert(selectedCert.id, {
-        issuedDate: certIssuedDate || undefined, // Ngày cert được tạo ở cơ quan
+        issuedDate: certIssuedDate || undefined,
         expirationDate: finalExpirationDate,
         validityOptionId: useCustomExpiration ? undefined : (selectedValidityOptionId || undefined),
       })
       setShowApproveModal(false)
       setSelectedCert(null)
-      setExpirationDate('')
-      setCertIssuedDate('')
-      setSelectedValidityOptionId('')
-      setUseCustomExpiration(false)
-      setValidityOptions([])
-      setIsPermanent(false)
+      resetFormState()
       await fetchCerts(certPage, certLimit, certAppliedSearch, certStatus)
     } catch (err: any) {
       alert(err.message || 'Không thể duyệt chứng chỉ')
@@ -246,44 +273,64 @@ export default function AdminManage() {
   }
 
   // Revoke cert by admin
-  const handleRevokeByAdmin = async (id: string) => {
-    if (!confirm('Bạn có chắc chắn muốn thu hồi chứng chỉ này?')) return
+  const handleRevokeByAdmin = async () => {
+    if (!selectedCert) return
+    
+    setIsRevoking(true)
     try {
-      await revokeCertByAdmin(id)
-      fetchCerts(certPage, certLimit)
+      await revokeCertByAdmin(selectedCert.id)
+      setShowRevokeModal(false)
+      setSelectedCert(null)
+      // Refresh với đầy đủ filters
+      await fetchCerts(certPage, certLimit, certAppliedSearch, certStatus)
     } catch (err: any) {
       alert(err.message || 'Không thể thu hồi chứng chỉ')
+    } finally {
+      setIsRevoking(false)
+    }
+  }
+
+  // Transfer certificate to another user
+  const handleTransferCertificate = async () => {
+    if (!selectedCert || !transferNewUserId || !transferNote.trim()) return
+    
+    setIsTransferring(true)
+    try {
+      const result = await transferCertificate(
+        selectedCert.id, 
+        transferNewUserId, 
+        transferNote.trim(),
+        transferHolderName.trim() || undefined
+      )
+      setShowTransferModal(false)
+      setSelectedCert(null)
+      setTransferNewUserId(null)
+      setTransferNote('')
+      setTransferHolderName('')
+      // Refresh với đầy đủ filters - đảm bảo refresh ngay lập tức
+      setCerts([]) // Clear certs trước để hiển thị loading
+      await fetchCerts(certPage, certLimit, certAppliedSearch, certStatus)
+      alert(result.message || 'Đã chuyển chứng chỉ thành công')
+    } catch (err: any) {
+      alert(err.message || 'Không thể chuyển chứng chỉ')
+    } finally {
+      setIsTransferring(false)
     }
   }
 
   // Update expiration date and issued date
   const handleUpdateExpiration = async () => {
     if (!selectedCert) return
-    
+
     // Validate: Nếu không phải vĩnh viễn, cần có expirationDate
-    if (!isPermanent && !expirationDate) {
+    if (!isPermanent && !expirationDate && !selectedValidityOptionId) {
       alert('Vui lòng chọn thời hạn hoặc nhập ngày hết hạn')
       return
     }
-    
+
     try {
-      // Nếu có validity option nhưng chưa có expirationDate, tính lại
-      let finalExpirationDate = expirationDate || undefined
-      
-      if (selectedValidityOptionId && !finalExpirationDate && certIssuedDate && !useCustomExpiration) {
-        const selectedOption = validityOptions.find(opt => opt.id === selectedValidityOptionId)
-        if (selectedOption) {
-          const baseDate = new Date(certIssuedDate)
-          if (selectedOption.periodMonths) {
-            baseDate.setMonth(baseDate.getMonth() + selectedOption.periodMonths)
-            finalExpirationDate = baseDate.toISOString().split('T')[0]
-          } else if (selectedOption.periodDays) {
-            baseDate.setDate(baseDate.getDate() + selectedOption.periodDays)
-            finalExpirationDate = baseDate.toISOString().split('T')[0]
-          }
-        }
-      }
-      
+      const finalExpirationDate = calculateExpirationDate()
+
       await updateExpirationDate(selectedCert.id, {
         issuedDate: certIssuedDate || undefined,
         expirationDate: finalExpirationDate,
@@ -291,18 +338,12 @@ export default function AdminManage() {
       })
       setShowUpdateExpirationModal(false)
       setSelectedCert(null)
-      setExpirationDate('')
-      setSelectedValidityOptionId('')
-      setUseCustomExpiration(false)
-      setCertIssuedDate('')
-      setValidityOptions([])
-      setIsPermanent(false)
+      resetFormState()
       await fetchCerts(certPage, certLimit, certAppliedSearch, certStatus)
     } catch (err: any) {
       alert(err.message || 'Không thể cập nhật thời gian tồn tại')
     }
   }
-
 
   return (
     <div className='page'>
@@ -408,40 +449,40 @@ export default function AdminManage() {
               <table className='data-table'>
                 <thead>
                   <tr>
-                    <th>Người nhận</th>
-                    <th>Văn bằng</th>
-                    <th>Trạng thái</th>
-                    <th>Ngày cấp</th>
-                    <th>Ngày hết hạn</th>
-                    <th>Ngày upload</th>
-                    <th>Ngày thu hồi</th>
-                    <th>Ghi chú</th>
-                    <th>Hành động</th>
+                    <th style={{ textAlign: 'center' }}>Người nhận</th>
+                    <th style={{ textAlign: 'center' }}>Văn bằng</th>
+                    <th style={{ textAlign: 'center' }}>Trạng thái</th>
+                    <th style={{ textAlign: 'center' }}>Ngày cấp</th>
+                    <th style={{ textAlign: 'center' }}>Ngày hết hạn</th>
+                    <th style={{ textAlign: 'center' }}>Ngày upload</th>
+                    <th style={{ textAlign: 'center' }}>Ngày thu hồi</th>
+                    <th style={{ textAlign: 'center' }}>Ghi chú</th>
+                    <th style={{ textAlign: 'center' }}>Hành động</th>
                   </tr>
                 </thead>
                 <tbody>
                   {certs.map((cert) => (
                     <tr key={cert.id}>
-                      <td>{cert.holderName}</td>
-                      <td>{cert.degree}</td>
-                      <td><StatusBadge status={cert.status} /></td>
-                      <td>{formatDateShort(cert.issuedDate)}</td>
-                      <td>{cert.expirationDate ? formatDateShort(cert.expirationDate) : '-'}</td>
-                      <td>{formatDateShort(cert.certxIssuedDate)}</td>
-                      <td>{cert.revokedAt ? formatDateShort(cert.revokedAt) : '-'}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
+                      <td style={{ textAlign: 'center', padding: '8px', fontSize: '13px' }}>{cert.holderName}</td>
+                      <td style={{ textAlign: 'center', padding: '8px', fontSize: '12px', color: '#6b7280' }}>{cert.degree}</td>
+                      <td style={{ textAlign: 'center', padding: '8px' }}><StatusBadge status={cert.status} /></td>
+                      <td style={{ textAlign: 'center', padding: '8px', fontSize: '12px' }}>{formatDateShort(cert.issuedDate)}</td>
+                      <td style={{ textAlign: 'center', padding: '8px', fontSize: '12px' }}>{cert.expirationDate ? formatDateShort(cert.expirationDate) : '-'}</td>
+                      <td style={{ textAlign: 'center', padding: '8px', fontSize: '12px' }}>{formatDateShort(cert.certxIssuedDate)}</td>
+                      <td style={{ textAlign: 'center', padding: '8px', fontSize: '12px' }}>{cert.revokedAt ? formatDateShort(cert.revokedAt) : '-'}</td>
+                      <td style={{ textAlign: 'center', padding: '8px' }}>
+                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
                           {cert.rejectionReason && (
                             <button
                               style={{
                                 background: 'none',
                                 border: 'none',
                                 cursor: 'pointer',
-                                padding: '4px',
+                                padding: '2px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                fontSize: '18px'
+                                fontSize: '16px'
                               }}
                               onClick={() => {
                                 setNoteContent({
@@ -462,11 +503,11 @@ export default function AdminManage() {
                                 background: 'none',
                                 border: 'none',
                                 cursor: 'pointer',
-                                padding: '4px',
+                                padding: '2px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                fontSize: '18px'
+                                fontSize: '16px'
                               }}
                               onClick={() => {
                                 setNoteContent({
@@ -481,24 +522,34 @@ export default function AdminManage() {
                             </button>
                           )}
                           {!cert.rejectionReason && !cert.reuploadNote && (
-                            <span style={{ color: '#999', fontSize: '14px' }}>-</span>
+                            <span style={{ color: '#999', fontSize: '12px' }}>-</span>
                           )}
                         </div>
                       </td>
-                      <td>
+                      <td style={{ textAlign: 'center', padding: '8px' }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center' }}>
                           {/* Xem trước file - cho tất cả status nếu có file */}
                           {(currentUserInfo.role === 'ADMIN' || currentUserInfo.role === 'SUPER_ADMIN') && (
                             <IconButton
-                              icon='👁️'
+                              icon={<IconZoomScan size={16} />}
                               label={isLoadingPreview ? 'Đang tải...' : 'Xem trước'}
+                              iconColor={getIconColor('preview')}
                               onClick={async () => {
                                 setPreviewCert(cert)
                                 setPreviewError(null)
                                 setIsLoadingPreview(true)
                                 try {
                                   const blobUrl = await getPreviewBlobUrl(cert.id)
-                                  setPreviewUrl(blobUrl)
+                                  // Fetch blob để lấy mimeType
+                                  const response = await fetch(blobUrl)
+                                  const blob = await response.blob()
+                                  const mimeType = blob.type || 'application/pdf'
+                                  const url = URL.createObjectURL(blob)
+                                  setPreviewFile({ 
+                                    url, 
+                                    mimeType, 
+                                    blob: mimeType.startsWith('image/') ? undefined : blob 
+                                  })
                                   setShowPreviewModal(true)
                                 } catch (err: any) {
                                   setPreviewError(err.message || 'Không thể tải file để xem trước')
@@ -515,8 +566,9 @@ export default function AdminManage() {
                           {cert.status === 'PENDING' && (currentUserInfo.role === 'ADMIN' || currentUserInfo.role === 'SUPER_ADMIN') && (
                             <>
                               <IconButton
-                                icon='✅'
+                                icon={<IconCircleCheck size={16} />}
                                 label='Duyệt'
+                                iconColor={getIconColor('approve')}
                                 onClick={() => { 
                                   setSelectedCert(cert)
                                   setExpirationDate('')
@@ -527,8 +579,9 @@ export default function AdminManage() {
                                 variant='primary'
                               />
                               <IconButton
-                                icon='❌'
+                                icon={<IconCircleX size={16} />}
                                 label='Từ chối'
+                                iconColor={getIconColor('reject')}
                                 onClick={() => { setSelectedCert(cert); setRejectionReason(''); setAllowReupload(false); setShowRejectModal(true) }}
                                 variant='outline'
                               />
@@ -539,14 +592,16 @@ export default function AdminManage() {
                           {cert.status === 'VALID' && (currentUserInfo.role === 'ADMIN' || currentUserInfo.role === 'SUPER_ADMIN') && (
                             <>
                               <IconButton
-                                icon='🗑️'
+                                icon={<IconCertificateOff size={16} />}
                                 label='Thu hồi'
-                                onClick={() => handleRevokeByAdmin(cert.id)}
+                                iconColor={getIconColor('revoke')}
+                                onClick={() => { setSelectedCert(cert); setShowRevokeModal(true) }}
                                 variant='outline'
                               />
                               <IconButton
-                                icon='⏰'
+                                icon={<IconClockEdit size={16} />}
                                 label='Chỉnh sửa thời gian'
+                                iconColor={getIconColor('editTime')}
                                 onClick={() => { 
                                   setSelectedCert(cert)
                                   setCertIssuedDate(cert.issuedDate || '')
@@ -568,11 +623,27 @@ export default function AdminManage() {
                               />
                               {cert.docHash && (
                                 <IconButton
-                                  icon='✓'
+                                  icon={<IconShieldCheck size={16} />}
                                   label='Verify'
+                                  iconColor={getIconColor('verify')}
                                   href={`/verify?hash=${cert.docHash}`}
                                   target='_blank'
                                   rel='noreferrer'
+                                  variant='ghost'
+                                />
+                              )}
+                              {currentUserInfo.role === 'SUPER_ADMIN' && (
+                                <IconButton
+                                  icon={<IconUserPlus size={16} />}
+                                  label='Chuyển người nhận'
+                                  iconColor={getIconColor('transfer')}
+                                  onClick={() => {
+                                    setSelectedCert(cert)
+                                    setTransferNewUserId(null)
+                                    setTransferNote('')
+                                    setTransferHolderName('')
+                                    setShowTransferModal(true)
+                                  }}
                                   variant='ghost'
                                 />
                               )}
@@ -582,8 +653,9 @@ export default function AdminManage() {
                           {/* REVOKED: Verify (nếu có docHash) */}
                           {cert.status === 'REVOKED' && cert.docHash && (
                             <IconButton
-                              icon='✓'
+                              icon={<IconShieldCheck size={16} />}
                               label='Verify'
+                              iconColor={getIconColor('verify')}
                               href={`/verify?hash=${cert.docHash}`}
                               target='_blank'
                               rel='noreferrer'
@@ -594,8 +666,9 @@ export default function AdminManage() {
                           {/* Metadata - chỉ SuperAdmin */}
                           {cert.metadataUri && currentUserInfo.role === 'SUPER_ADMIN' && (
                             <IconButton
-                              icon='📋'
+                              icon={<IconFileInfo size={16} />}
                               label='Metadata'
+                              iconColor={getIconColor('metadata')}
                               href={cert.metadataUri}
                               target='_blank'
                               rel='noreferrer'
@@ -920,6 +993,150 @@ export default function AdminManage() {
         </div>
       )}
 
+      {/* Revoke Modal */}
+      {showRevokeModal && selectedCert && (
+        <div className='modal-overlay' onClick={() => { setShowRevokeModal(false); setSelectedCert(null) }}>
+          <div className='modal' onClick={(e) => e.stopPropagation()}>
+            <div className='modal-header'>
+              <h3>Thu hồi chứng chỉ</h3>
+              <button className='modal-close-btn' onClick={() => { setShowRevokeModal(false); setSelectedCert(null) }} aria-label='Đóng'>×</button>
+            </div>
+            <div className='modal-body'>
+              <div style={{ marginBottom: '16px' }}>
+                <p><strong>Người nhận:</strong> {selectedCert.holderName}</p>
+                <p><strong>Văn bằng:</strong> {selectedCert.degree}</p>
+                {selectedCert.docHash && (
+                  <p style={{ fontSize: '12px', color: '#6b7280', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                    <strong>Hash:</strong> {selectedCert.docHash}
+                  </p>
+                )}
+              </div>
+              <div className='alert' style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#b91c1c' }}>
+                <strong>⚠️ Cảnh báo:</strong> Bạn có chắc chắn muốn thu hồi chứng chỉ này? Hành động này không thể hoàn tác. Chứng chỉ sẽ bị đánh dấu là đã thu hồi và không còn hiệu lực.
+              </div>
+            </div>
+            <div className='modal-actions'>
+              <button 
+                className='btn btn-ghost' 
+                onClick={() => { setShowRevokeModal(false); setSelectedCert(null) }}
+                disabled={isRevoking}
+              >
+                Hủy
+              </button>
+              <button 
+                className='btn btn-primary' 
+                onClick={handleRevokeByAdmin}
+                disabled={isRevoking}
+                style={{ background: '#ef4444', borderColor: '#ef4444' }}
+              >
+                {isRevoking ? 'Đang thu hồi...' : 'Xác nhận thu hồi'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Certificate Modal */}
+      {showTransferModal && selectedCert && (
+        <div className='modal-overlay' onClick={() => { setShowTransferModal(false); setSelectedCert(null); setTransferNewUserId(null); setTransferNote(''); setTransferHolderName('') }}>
+          <div className='modal' onClick={(e) => e.stopPropagation()}>
+            <div className='modal-header'>
+              <h3>Chuyển người nhận chứng chỉ</h3>
+              <button className='modal-close-btn' onClick={() => { setShowTransferModal(false); setSelectedCert(null); setTransferNewUserId(null); setTransferNote(''); setTransferHolderName('') }} aria-label='Đóng'>×</button>
+            </div>
+            <div className='modal-body'>
+              <div style={{ marginBottom: '16px' }}>
+                <p><strong>Người nhận hiện tại:</strong> {selectedCert.holderName}</p>
+                <p><strong>Văn bằng:</strong> {selectedCert.degree}</p>
+                {selectedCert.docHash && (
+                  <p style={{ fontSize: '12px', color: '#6b7280', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                    <strong>Hash:</strong> {selectedCert.docHash}
+                  </p>
+                )}
+              </div>
+              
+              <div className='field' style={{ marginBottom: '16px' }}>
+                <label>Người nhận mới *</label>
+                <UserSelector
+                  value={transferNewUserId || undefined}
+                  onChange={(userId, userName) => {
+                    setTransferNewUserId(userId)
+                    // Tự động điền tên khi chọn user, nhưng cho phép chỉnh sửa
+                    if (userId && userName && !transferHolderName) {
+                      setTransferHolderName(userName)
+                    }
+                  }}
+                  placeholder='Chọn người nhận mới...'
+                />
+              </div>
+
+              <div className='field' style={{ marginBottom: '16px' }}>
+                <label>Tên người nhận (tùy chọn)</label>
+                <input
+                  type='text'
+                  value={transferHolderName}
+                  onChange={(e) => setTransferHolderName(e.target.value)}
+                  placeholder='Nhập tên người nhận (để trống sẽ dùng tên từ user)...'
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    fontFamily: 'inherit'
+                  }}
+                />
+                <small className='field-hint' style={{ marginTop: '4px', display: 'block' }}>
+                  Có thể chỉnh sửa tên người nhận hiển thị trên chứng chỉ. Nếu để trống, hệ thống sẽ dùng tên từ tài khoản user đã chọn.
+                </small>
+              </div>
+
+              <div className='field' style={{ marginBottom: '16px' }}>
+                <label>Ghi chú *</label>
+                <textarea
+                  value={transferNote}
+                  onChange={(e) => setTransferNote(e.target.value)}
+                  placeholder='Nhập lý do chuyển chứng chỉ...'
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    fontFamily: 'inherit',
+                    resize: 'vertical'
+                  }}
+                />
+                <small className='field-hint' style={{ marginTop: '4px', display: 'block' }}>
+                  Ghi chú này sẽ được lưu trong lịch sử chuyển đổi và audit log
+                </small>
+              </div>
+
+              <div className='alert' style={{ background: 'rgba(37, 99, 235, 0.1)', border: '1px solid rgba(37, 99, 235, 0.3)', color: '#1e40af' }}>
+                <strong>ℹ️ Lưu ý:</strong> Hành động này sẽ chuyển quyền sở hữu chứng chỉ sang người nhận mới. Thông tin này sẽ được ghi lại trong audit log.
+              </div>
+            </div>
+            <div className='modal-actions'>
+              <button
+                className='btn btn-ghost'
+                onClick={() => { setShowTransferModal(false); setSelectedCert(null); setTransferNewUserId(null); setTransferNote(''); setTransferHolderName('') }}
+                disabled={isTransferring}
+              >
+                Hủy
+              </button>
+              <button
+                className='btn btn-primary'
+                onClick={handleTransferCertificate}
+                disabled={isTransferring || !transferNewUserId || !transferNote.trim()}
+              >
+                {isTransferring ? 'Đang chuyển...' : 'Xác nhận chuyển'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Update Expiration Modal */}
       {showUpdateExpirationModal && selectedCert && (
         <div className='modal-overlay' onClick={() => { setShowUpdateExpirationModal(false); setExpirationDate(''); setSelectedValidityOptionId(''); setUseCustomExpiration(false); setCertIssuedDate('') }}>
@@ -1130,52 +1347,186 @@ export default function AdminManage() {
 
       {/* Preview Modal */}
       {showPreviewModal && previewCert && (
-        <div className='modal-overlay' onClick={() => {
-          if (previewUrl) URL.revokeObjectURL(previewUrl)
-          setShowPreviewModal(false)
-          setPreviewCert(null)
-          setPreviewUrl(null)
-          setPreviewError(null)
-        }}>
-          <div className='modal' style={{ maxWidth: '90vw', maxHeight: '90vh', width: '800px' }} onClick={(e) => e.stopPropagation()}>
-            <div className='modal-header'>
-              <h3>Xem trước file chứng chỉ</h3>
-              <button className='modal-close-btn' onClick={() => {
-                if (previewUrl) URL.revokeObjectURL(previewUrl)
-                setShowPreviewModal(false)
-                setPreviewCert(null)
-                setPreviewUrl(null)
-                setPreviewError(null)
-              }}>×</button>
-            </div>
-            <div className='modal-body' style={{ padding: '16px', overflow: 'auto' }}>
-              <div style={{ marginBottom: '16px' }}>
-                <p><strong>Người nhận:</strong> {previewCert.holderName}</p>
-                <p><strong>Văn bằng:</strong> {previewCert.degree}</p>
-                <p><strong>Trạng thái:</strong> <StatusBadge status={previewCert.status} /></p>
+        <div 
+          className='modal-overlay' 
+          onClick={() => {
+            if (previewFile) URL.revokeObjectURL(previewFile.url)
+            setShowPreviewModal(false)
+            setPreviewCert(null)
+            setPreviewFile(null)
+            setPreviewError(null)
+            setZoomLevel(1)
+          }}
+          style={{ zIndex: 2000 }}
+        >
+          <div 
+            className='modal' 
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              maxWidth: '95vw', 
+              width: '1200px',
+              height: '90vh',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 0
+            }}
+          >
+            <div className='modal-header' style={{ flexShrink: 0, padding: '20px 24px' }}>
+              <div>
+                <h3 style={{ margin: 0, marginBottom: '4px' }}>Xem trước file chứng chỉ</h3>
+                <p style={{ margin: 0, fontSize: '14px', color: '#666' }}>
+                  {previewCert.holderName} • {previewCert.degree}
+                </p>
               </div>
+              <button 
+                className='modal-close-btn' 
+                onClick={() => {
+                  if (previewFile) URL.revokeObjectURL(previewFile.url)
+                  setShowPreviewModal(false)
+                  setPreviewCert(null)
+                  setPreviewFile(null)
+                  setPreviewError(null)
+                  setZoomLevel(1)
+                }}
+                style={{ fontSize: '28px' }}
+              >
+                ×
+              </button>
+            </div>
+            <div 
+              className='modal-body' 
+              style={{ 
+                flex: 1,
+                overflow: 'hidden',
+                padding: '0',
+                display: 'flex',
+                flexDirection: 'column',
+                background: '#f9fafb',
+                minHeight: 0,
+                position: 'relative'
+              }}
+            >
               {previewError ? (
-                <div className='alert'>⚠️ {previewError}</div>
-              ) : previewUrl ? (
-                <div className='preview-surface' style={{ border: '1px solid #ddd', borderRadius: '4px', minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <iframe 
-                    src={previewUrl} 
-                    title='Certificate preview' 
-                    style={{ width: '100%', height: '600px', border: 'none' }}
-                  />
-                </div>
+                <div className='alert' style={{ margin: '16px' }}>⚠️ {previewError}</div>
+              ) : previewFile ? (
+                <>
+                  {previewFile.mimeType.startsWith('image/') ? (
+                    <div style={{
+                      flex: 1,
+                      overflow: 'auto',
+                      padding: '24px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: '#f9fafb',
+                      transform: `scale(${zoomLevel})`,
+                      transformOrigin: 'center center',
+                      transition: 'transform 0.2s'
+                    }}>
+                      <img 
+                        src={previewFile.url} 
+                        alt='Certificate' 
+                        style={{ 
+                          maxWidth: '100%', 
+                          maxHeight: '100%', 
+                          objectFit: 'contain',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                          background: '#fff',
+                          padding: '8px'
+                        }} 
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      flex: 1, 
+                      overflow: 'hidden',
+                      transform: `scale(${zoomLevel})`,
+                      transformOrigin: 'top left',
+                      transition: 'transform 0.2s',
+                      width: `${100 / zoomLevel}%`,
+                      height: `${100 / zoomLevel}%`
+                    }}>
+                      <PdfViewer 
+                        file={previewFile.blob || previewFile.url} 
+                        initialMode="fit" 
+                        showControls={false}
+                      />
+                    </div>
+                  )}
+                  {/* Zoom controls */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '80px',
+                    right: '24px',
+                    display: 'flex',
+                    gap: '8px',
+                    background: 'white',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                    zIndex: 10
+                  }}>
+                    <button
+                      className='btn btn-ghost'
+                      onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))}
+                      style={{ padding: '8px 12px', fontSize: '18px', minWidth: '40px' }}
+                      title="Thu nhỏ"
+                    >
+                      −
+                    </button>
+                    <span style={{ 
+                      fontSize: '14px', 
+                      color: '#666', 
+                      minWidth: '60px', 
+                      textAlign: 'center',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}>
+                      {Math.round(zoomLevel * 100)}%
+                    </span>
+                    <button
+                      className='btn btn-ghost'
+                      onClick={() => setZoomLevel(z => Math.min(2, z + 0.1))}
+                      style={{ padding: '8px 12px', fontSize: '18px', minWidth: '40px' }}
+                      title="Phóng to"
+                    >
+                      +
+                    </button>
+                    <button
+                      className='btn btn-ghost'
+                      onClick={() => setZoomLevel(1)}
+                      style={{ padding: '8px 12px', fontSize: '12px', marginLeft: '4px' }}
+                      title="Reset zoom"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </>
               ) : (
-                <div className='loading-state'>Đang tải file...</div>
+                <div className='loading-state' style={{ 
+                  flex: 1, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center' 
+                }}>
+                  Đang tải file...
+                </div>
               )}
             </div>
-            <div className='modal-actions'>
-              <button className='btn btn-ghost' onClick={() => {
-                if (previewUrl) URL.revokeObjectURL(previewUrl)
-                setShowPreviewModal(false)
-                setPreviewCert(null)
-                setPreviewUrl(null)
-                setPreviewError(null)
-              }}>
+            <div className='modal-actions' style={{ flexShrink: 0, padding: '16px 24px' }}>
+              <button
+                className='btn btn-ghost'
+                onClick={() => {
+                  if (previewFile) URL.revokeObjectURL(previewFile.url)
+                  setShowPreviewModal(false)
+                  setPreviewCert(null)
+                  setPreviewFile(null)
+                  setPreviewError(null)
+                  setZoomLevel(1)
+                }}
+              >
                 Đóng
               </button>
             </div>

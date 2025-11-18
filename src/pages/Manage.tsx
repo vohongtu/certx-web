@@ -1,9 +1,12 @@
-import { ChangeEvent, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { IconShieldCheck, IconCloudUpload } from '@tabler/icons-react'
 import StatusBadge from '../components/StatusBadge'
 import IconButton from '../components/IconButton'
+import { getIconColor } from '../utils/iconColors'
 import ReuploadModal from '../components/ReuploadModal'
 import FilterBar from '../components/FilterBar'
-import { CertSummary, CertListResponse, listCerts, revokeCert, CertStatus, reuploadCert, getPreviewBlobUrl } from '../api/certs.api'
+import PdfViewer from '../components/PdfViewer'
+import { CertSummary, CertListResponse, listCerts, CertStatus, reuploadCert, getPreviewBlobUrl } from '../api/certs.api'
 import { formatDateShort, formatDateRange } from '../utils/format'
 import { truncateHash, copyToClipboard, getPageNumbers } from '../utils/common'
 import { usePagination } from '../hooks/usePagination'
@@ -15,19 +18,19 @@ export default function Manage() {
   const [certs, setCerts] = useState<CertSummary[]>([])
   const [status, setStatus] = useState<'ALL' | CertStatus>('ALL')
   const [isLoading, setIsLoading] = useState(false)
-  
+
   const { pagination, page, limit, setPage, setLimit, updatePagination } = usePagination({ defaultLimit: DEFAULT_PAGE_LIMIT })
-  const { searchText, appliedSearch, setSearchText, reset: resetSearch } = useSearch()
+  const { searchText, appliedSearch, setSearchText } = useSearch()
   const [error, setError] = useState<string | null>(null)
-  const [isRevoking, setIsRevoking] = useState<string | null>(null)
   const [showReuploadModal, setShowReuploadModal] = useState(false)
   const [selectedCertForReup, setSelectedCertForReup] = useState<CertSummary | null>(null)
   const [isReuploading, setIsReuploading] = useState(false)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [previewCert, setPreviewCert] = useState<CertSummary | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewFile, setPreviewFile] = useState<{ url: string; mimeType: string; blob?: Blob } | null>(null)
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  const [zoomLevel, setZoomLevel] = useState(1)
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [noteContent, setNoteContent] = useState<{ type: 'rejection' | 'reupload' | 'both'; rejectionReason?: string; reuploadNote?: string } | null>(null)
 
@@ -36,7 +39,7 @@ export default function Manage() {
     const requestedLimit = targetLimit ?? limit
     const requestedSearch = search !== undefined ? search : appliedSearch
     const requestedStatus = targetStatus !== undefined ? targetStatus : status
-    
+
     // Clear certs ngay lập tức khi filter thay đổi
     setCerts([])
     setIsLoading(true)
@@ -64,17 +67,22 @@ export default function Manage() {
 
   useEffect(() => {
     setPage(1)
-    fetchCerts(1, limit, appliedSearch, status)
+    fetchCerts(1, limit, appliedSearch, status).catch(err => {
+      console.error('[Manage] Error fetching certs:', err)
+      setError(err.message || 'Không thể tải danh sách chứng chỉ')
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedSearch, status, limit])
 
   useEffect(() => {
-    fetchCerts(page, limit, appliedSearch, status)
+    fetchCerts(page, limit, appliedSearch, status).catch(err => {
+      console.error('[Manage] Error fetching certs:', err)
+      setError(err.message || 'Không thể tải danh sách chứng chỉ')
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page])
 
-  const handleStatusChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const newStatus = event.target.value as 'ALL' | CertStatus
+  const handleStatusChange = (newStatus: 'ALL' | CertStatus) => {
     setStatus(newStatus)
     setPage(1)
     // Clear certs ngay lập tức và fetch với status mới
@@ -82,30 +90,14 @@ export default function Manage() {
     fetchCerts(1, limit, appliedSearch, newStatus)
   }
 
-  const handleLimitChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const newLimit = parseInt(event.target.value, 10)
-    setLimit(newLimit)
-    setPage(1)
-  }
-
-
-  const handleRevoke = async (hash: string) => {
-    if (isRevoking) return
-    if (!confirm('Thu hồi chứng chỉ này?')) return
-    setIsRevoking(hash)
-    try {
-      await revokeCert(hash)
-      await fetchCerts(page, limit, appliedSearch, status)
-    } catch (err: any) {
-      alert(err?.response?.data?.message || err.message || 'Thu hồi thất bại')
-    } finally {
-      setIsRevoking(null)
-    }
-  }
-
   const openReuploadModal = (cert: CertSummary) => {
     setSelectedCertForReup(cert)
     setShowReuploadModal(true)
+  }
+
+  // Helper function để check xem đã có cert PENDING nào được tạo từ cert REJECTED này chưa
+  const hasPendingReup = (certId: string) => {
+    return certs.some(c => c.status === 'PENDING' && c.reuploadedFrom === certId)
   }
 
   const handleReupload = async (data: {
@@ -158,52 +150,52 @@ export default function Manage() {
             <table className='data-table'>
               <thead>
                 <tr>
-                  <th>Người nhận</th>
-                  <th>Hash</th>
-                  <th>Trạng thái</th>
-                  <th>Ngày cấp - Ngày hết hạn</th>
-                  <th>Ngày upload</th>
-                  <th>Ghi chú</th>
-                  <th>Hành động</th>
+                  <th style={{ textAlign: 'center' }}>Người nhận</th>
+                  <th style={{ textAlign: 'center' }}>Hash</th>
+                  <th style={{ textAlign: 'center' }}>Trạng thái</th>
+                  <th style={{ textAlign: 'center' }}>Ngày cấp - Ngày hết hạn</th>
+                  <th style={{ textAlign: 'center' }}>Ngày upload</th>
+                  <th style={{ textAlign: 'center' }}>Ghi chú</th>
+                  <th style={{ textAlign: 'center' }}>Hành động</th>
                 </tr>
               </thead>
               <tbody>
                 {certs.map((cert) => (
                   <tr key={cert.id}>
-                    <td>
-                      <div className='table-primary'>{cert.holderName}</div>
-                      <div className='table-secondary'>{cert.degree}</div>
+                    <td style={{ textAlign: 'center', padding: '8px' }}>
+                      <div className='table-primary' style={{ fontSize: '13px', fontWeight: '500', marginBottom: '2px' }}>{cert.holderName}</div>
+                      <div className='table-secondary' style={{ fontSize: '11px', color: '#6b7280' }}>{cert.degree}</div>
                     </td>
-                    <td>
-                      <div className='hash-cell'>
-                        <span className='hash-text' title={cert.docHash} style={{ fontSize: '0.8rem', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{truncateHash(cert.docHash, 6, 4)}</span>
+                    <td style={{ textAlign: 'center', padding: '8px' }}>
+                      <div className='hash-cell' style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                        <span className='hash-text' title={cert.docHash} style={{ fontSize: '11px', fontFamily: 'monospace', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{truncateHash(cert.docHash, 6, 4)}</span>
                         <button 
                           className='hash-copy-btn' 
                           onClick={(e) => copyToClipboard(cert.docHash, e.currentTarget)}
                           title='Copy hash'
                           aria-label='Copy hash'
-                          style={{ fontSize: '14px', padding: '2px 6px' }}
+                          style={{ fontSize: '12px', padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer' }}
                         >
                           📋
                         </button>
                       </div>
                     </td>
-                    <td><StatusBadge status={cert.status} /></td>
-                    <td className='date-cell'>{formatDateRange(cert.issuedDate, cert.expirationDate)}</td>
-                    <td className='date-cell'>{formatDateShort(cert.certxIssuedDate)}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
+                    <td style={{ textAlign: 'center', padding: '8px' }}><StatusBadge status={cert.status} /></td>
+                    <td className='date-cell' style={{ textAlign: 'center', padding: '8px', fontSize: '12px' }}>{formatDateRange(cert.issuedDate, cert.expirationDate)}</td>
+                    <td className='date-cell' style={{ textAlign: 'center', padding: '8px', fontSize: '12px' }}>{formatDateShort(cert.certxIssuedDate)}</td>
+                    <td style={{ textAlign: 'center', padding: '8px' }}>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
                         {cert.rejectionReason && (
                           <button
                             style={{
                               background: 'none',
                               border: 'none',
                               cursor: 'pointer',
-                              padding: '4px',
+                              padding: '2px',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              fontSize: '18px'
+                              fontSize: '16px'
                             }}
                             onClick={() => {
                               setNoteContent({
@@ -224,11 +216,11 @@ export default function Manage() {
                               background: 'none',
                               border: 'none',
                               cursor: 'pointer',
-                              padding: '4px',
+                              padding: '2px',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              fontSize: '18px'
+                              fontSize: '16px'
                             }}
                             onClick={() => {
                               setNoteContent({
@@ -243,60 +235,33 @@ export default function Manage() {
                           </button>
                         )}
                         {!cert.rejectionReason && !cert.reuploadNote && (
-                          <span style={{ color: '#999', fontSize: '14px' }}>-</span>
+                          <span style={{ color: '#999', fontSize: '12px' }}>-</span>
                         )}
                       </div>
                     </td>
-                    <td>
+                    <td style={{ textAlign: 'center', padding: '8px' }}>
                       <div className='table-actions' style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                         {cert.status === 'VALID' && (
                           <IconButton
-                            icon='✓'
+                            icon={<IconShieldCheck size={16} />}
                             label='Verify'
-                            href={`${window.location.origin}/verify?hash=${cert.docHash}`}
+                            iconColor={getIconColor('verify')}
+                            href={`${typeof window !== 'undefined' ? window.location.origin : ''}/verify?hash=${cert.docHash}`}
                             target='_blank'
                             rel='noreferrer'
                             variant='ghost'
                           />
                         )}
-                        {cert.metadataUri && (
+                        {cert.status === 'REJECTED' && cert.allowReupload && !hasPendingReup(cert.id) && (
                           <IconButton
-                            icon='📋'
-                            label='Metadata'
-                            href={cert.metadataUri}
-                            target='_blank'
-                            rel='noreferrer'
-                            variant='ghost'
-                          />
-                        )}
-                        {cert.status === 'VALID' && (
-                          <IconButton
-                            icon='🗑️'
-                            label={isRevoking === cert.docHash ? 'Đang thu hồi...' : 'Thu hồi'}
-                            onClick={() => handleRevoke(cert.docHash)}
-                            disabled={Boolean(isRevoking)}
+                            icon={<IconCloudUpload size={16} />}
+                            label='Gửi lại'
+                            iconColor={getIconColor('reupload')}
+                            onClick={() => openReuploadModal(cert)}
+                            disabled={isReuploading}
                             variant='outline'
                           />
                         )}
-                        {cert.status === 'REJECTED' && cert.allowReupload && (() => {
-                          // Kiểm tra xem đã có cert PENDING nào được tạo từ cert REJECTED này chưa
-                          const hasPendingReup = certs.some(c => 
-                            c.status === 'PENDING' && 
-                            c.reuploadedFrom === cert.id
-                          )
-                          // Nếu đã có cert PENDING được tạo từ cert này, không hiển thị nút Reup
-                          if (hasPendingReup) return null
-                          
-                          return (
-                            <IconButton
-                              icon='🔄'
-                              label='Reup'
-                              onClick={() => openReuploadModal(cert)}
-                              disabled={isReuploading}
-                              variant='primary'
-                            />
-                          )
-                        })()}
                       </div>
                     </td>
                   </tr>
@@ -415,7 +380,16 @@ export default function Manage() {
                     setIsLoadingPreview(true)
                     try {
                       const blobUrl = await getPreviewBlobUrl(cert.id)
-                      setPreviewUrl(blobUrl)
+                      // Fetch blob để lấy mimeType
+                      const response = await fetch(blobUrl)
+                      const blob = await response.blob()
+                      const mimeType = blob.type || 'application/pdf'
+                      const url = URL.createObjectURL(blob)
+                      setPreviewFile({ 
+                        url, 
+                        mimeType, 
+                        blob: mimeType.startsWith('image/') ? undefined : blob 
+                      })
                       setShowPreviewModal(true)
                     } catch (err: any) {
                       setPreviewError(err.message || 'Không thể tải file để xem trước')
@@ -428,43 +402,19 @@ export default function Manage() {
                   {isLoadingPreview ? 'Đang tải...' : 'Xem trước'}
                 </button>
                 {cert.status === 'VALID' && (
-                  <a className='btn btn-ghost' href={`${window.location.origin}/verify?hash=${cert.docHash}`} target='_blank' rel='noreferrer'>
+                  <a className='btn btn-ghost' href={`${typeof window !== 'undefined' ? window.location.origin : ''}/verify?hash=${cert.docHash}`} target='_blank' rel='noreferrer'>
                     Xem verify
                   </a>
                 )}
-                {cert.metadataUri && (
-                  <a className='btn btn-ghost' href={cert.metadataUri} target='_blank' rel='noreferrer'>
-                    Metadata
-                  </a>
-                )}
-                {cert.status === 'VALID' && (
+                {cert.status === 'REJECTED' && cert.allowReupload && !hasPendingReup(cert.id) && (
                   <button
-                    className='btn btn-outline'
-                    onClick={() => handleRevoke(cert.docHash)}
-                    disabled={Boolean(isRevoking)}
+                    className='btn btn-primary'
+                    onClick={() => openReuploadModal(cert)}
+                    disabled={isReuploading}
                   >
-                    {isRevoking === cert.docHash ? 'Đang thu hồi...' : 'Thu hồi'}
+                    Reup
                   </button>
                 )}
-                {cert.status === 'REJECTED' && cert.allowReupload && (() => {
-                  // Kiểm tra xem đã có cert PENDING nào được tạo từ cert REJECTED này chưa
-                  const hasPendingReup = certs.some(c => 
-                    c.status === 'PENDING' && 
-                    c.reuploadedFrom === cert.id
-                  )
-                  // Nếu đã có cert PENDING được tạo từ cert này, không hiển thị nút Reup
-                  if (hasPendingReup) return null
-                  
-                  return (
-                    <button
-                      className='btn btn-primary'
-                      onClick={() => openReuploadModal(cert)}
-                      disabled={isReuploading}
-                    >
-                      Reup
-                    </button>
-                  )
-                })()}
               </div>
             </div>
           ))}
@@ -529,7 +479,6 @@ export default function Manage() {
     <div className='page'>
       <div className='page-header'>
         <div>
-          <div className='page-eyebrow'>User Dashboard</div>
           <h1 className='page-title'>Lịch sử upload</h1>
           <p className='page-subtitle'>Theo dõi toàn bộ file đã upload và trạng thái duyệt.</p>
         </div>
@@ -561,182 +510,198 @@ export default function Manage() {
 
       {/* Reupload Modal */}
       {showReuploadModal && selectedCertForReup && (
-        <div className='modal-overlay' onClick={() => {
-          setShowReuploadModal(false)
-          setSelectedCertForReup(null)
-          setReuploadFile(null)
-          setReuploadNote('')
-          setReuploadHolderName('')
-          setReuploadDegree('')
-          setReuploadCredentialTypeId(null)
-          setReuploadUseOriginalFile(false)
-        }}>
-          <div className='modal' onClick={(e) => e.stopPropagation()}>
-            <div className='modal-header'>
-              <h3>Reup chứng chỉ</h3>
-              <button className='modal-close-btn' onClick={() => {
-                setShowReuploadModal(false)
-                setSelectedCertForReup(null)
-                setReuploadFile(null)
-                setReuploadNote('')
-                setReuploadHolderName('')
-                setReuploadDegree('')
-                setReuploadCredentialTypeId(null)
-                setReuploadUseOriginalFile(false)
-              }} aria-label='Đóng'>×</button>
-            </div>
-            <div className='modal-body'>
-              <p className='text-muted'>Chứng chỉ đã bị từ chối. Vui lòng chọn file và điền thông tin.</p>
-              {selectedCertForReup.rejectionReason && (
-                <div className='info-box' style={{ marginBottom: '16px', padding: '12px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px' }}>
-                  <strong>Lý do từ chối:</strong> {selectedCertForReup.rejectionReason}
-                </div>
-              )}
-              
-              <div className='field'>
-                <label>Chọn file *</label>
-                <div className='field' style={{ marginBottom: '12px' }}>
-                  <label className='checkbox-label'>
-                    <input 
-                      type='checkbox' 
-                      checked={reuploadUseOriginalFile} 
-                      onChange={(e) => {
-                        setReuploadUseOriginalFile(e.target.checked)
-                        if (e.target.checked) {
-                          setReuploadFile(null)
-                        }
-                      }} 
-                    />
-                    <span>Dùng file cũ (file đã upload trước đó)</span>
-                  </label>
-                  <small className='field-hint'>Nếu chọn, hệ thống sẽ sử dụng file đã upload trước đó</small>
-                </div>
-                
-                {!reuploadUseOriginalFile && (
-                  <FilePicker onPick={setReuploadFile} file={reuploadFile} onError={(msg) => alert(msg)} />
-                )}
-                
-                {reuploadUseOriginalFile && (
-                  <div className='info-box' style={{ padding: '12px', background: 'rgba(37, 99, 235, 0.1)', borderRadius: '8px' }}>
-                    <small className='field-hint'>
-                      ✓ Sẽ sử dụng file đã upload trước đó. Ngày cấp sẽ tự động được set bằng ngày upload mới.
-                    </small>
-                  </div>
-                )}
-              </div>
-              
-              <div className='field' style={{ marginTop: '16px' }}>
-                <label>Ghi chú *</label>
-                <textarea 
-                  value={reuploadNote} 
-                  onChange={(e) => setReuploadNote(e.target.value)} 
-                  placeholder='Nhập ghi chú về việc reup...' 
-                  required 
-                  rows={4}
-                />
-                <small className='field-hint'>Vui lòng nhập ghi chú trước khi reup</small>
-              </div>
-
-              <div className='field'>
-                <label>Người nhận *</label>
-                <input 
-                  type='text' 
-                  value={reuploadHolderName} 
-                  onChange={(e) => setReuploadHolderName(e.target.value)} 
-                  placeholder='Tên người nhận' 
-                  required 
-                />
-              </div>
-
-              <div className='field'>
-                <label>Văn bằng *</label>
-                <DocumentTypeSelector
-                  value={reuploadCredentialTypeId || reuploadDegree}
-                  onChange={(id, name) => {
-                    setReuploadCredentialTypeId(id)
-                    setReuploadDegree(name)
-                  }}
-                  placeholder="Chọn loại văn bằng..."
-                  allowCustom={true}
-                />
-              </div>
-
-              <div className='info-box' style={{ marginTop: '16px', padding: '12px', background: 'rgba(37, 99, 235, 0.1)', borderRadius: '8px' }}>
-                <small className='field-hint'>
-                  ℹ️ Ngày cấp sẽ tự động được set bằng ngày upload. Admin sẽ quyết định ngày hết hạn khi duyệt chứng chỉ.
-                </small>
-              </div>
-            </div>
-            <div className='modal-actions'>
-              <button className='btn btn-ghost' onClick={() => {
-                setShowReuploadModal(false)
-                setSelectedCertForReup(null)
-                setReuploadFile(null)
-                setReuploadNote('')
-                setReuploadHolderName('')
-                setReuploadDegree('')
-                setReuploadUseOriginalFile(false)
-              }}>Hủy</button>
-              <button 
-                className='btn btn-primary' 
-                onClick={handleReupload}
-                disabled={(!reuploadUseOriginalFile && !reuploadFile) || !reuploadNote.trim() || !reuploadHolderName.trim() || (!reuploadDegree.trim() && !reuploadCredentialTypeId) || isReuploading}
-              >
-                {isReuploading ? 'Đang reup...' : 'Reup'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ReuploadModal
+          cert={selectedCertForReup}
+          onClose={() => {
+            setShowReuploadModal(false)
+            setSelectedCertForReup(null)
+          }}
+          onReupload={handleReupload}
+          isReuploading={isReuploading}
+        />
       )}
 
       {/* Preview Modal */}
       {showPreviewModal && previewCert && (
-        <div className='modal-overlay' onClick={() => {
-          if (previewUrl) URL.revokeObjectURL(previewUrl)
+        <div 
+          className='modal-overlay' 
+          onClick={() => {
+            if (previewFile) URL.revokeObjectURL(previewFile.url)
           setShowPreviewModal(false)
           setPreviewCert(null)
-          setPreviewUrl(null)
+            setPreviewFile(null)
           setPreviewError(null)
-        }}>
-          <div className='modal' style={{ maxWidth: '90vw', maxHeight: '90vh', width: '800px' }} onClick={(e) => e.stopPropagation()}>
-            <div className='modal-header'>
-              <h3>Xem trước file chứng chỉ</h3>
-              <button className='modal-close-btn' onClick={() => {
-                if (previewUrl) URL.revokeObjectURL(previewUrl)
+            setZoomLevel(1)
+          }}
+          style={{ zIndex: 2000 }}
+        >
+          <div 
+            className='modal' 
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              maxWidth: '95vw', 
+              width: '1200px',
+              height: '90vh',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 0
+            }}
+          >
+            <div className='modal-header' style={{ flexShrink: 0, padding: '20px 24px' }}>
+              <div>
+                <h3 style={{ margin: 0, marginBottom: '4px' }}>Xem trước file chứng chỉ</h3>
+                <p style={{ margin: 0, fontSize: '14px', color: '#666' }}>
+                  {previewCert.holderName} • {previewCert.degree}
+                </p>
+              </div>
+              <button 
+                className='modal-close-btn' 
+                onClick={() => {
+                  if (previewFile) URL.revokeObjectURL(previewFile.url)
                 setShowPreviewModal(false)
                 setPreviewCert(null)
-                setPreviewUrl(null)
+                  setPreviewFile(null)
                 setPreviewError(null)
-              }}>×</button>
+                  setZoomLevel(1)
+                }}
+                style={{ fontSize: '28px' }}
+              >
+                ×
+              </button>
             </div>
-            <div className='modal-body' style={{ padding: '16px', overflow: 'auto' }}>
-              <div style={{ marginBottom: '16px' }}>
-                <p><strong>Người nhận:</strong> {previewCert.holderName}</p>
-                <p><strong>Văn bằng:</strong> {previewCert.degree}</p>
-                <p><strong>Trạng thái:</strong> <StatusBadge status={previewCert.status} /></p>
-              </div>
+            <div 
+              className='modal-body' 
+              style={{ 
+                flex: 1,
+                overflow: 'hidden',
+                padding: '0',
+                display: 'flex',
+                flexDirection: 'column',
+                background: '#f9fafb',
+                minHeight: 0
+              }}
+            >
               {previewError ? (
-                <div className='alert'>⚠️ {previewError}</div>
-              ) : previewUrl ? (
-                <div className='preview-surface' style={{ border: '1px solid #ddd', borderRadius: '4px', minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <iframe 
-                    src={previewUrl} 
-                    title='Certificate preview' 
-                    style={{ width: '100%', height: '600px', border: 'none' }}
+                <div className='alert' style={{ margin: '16px' }}>⚠️ {previewError}</div>
+              ) : previewFile ? (
+                <>
+                  {previewFile.mimeType.startsWith('image/') ? (
+                    <div style={{
+                      flex: 1,
+                      overflow: 'auto',
+                      padding: '24px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: '#f9fafb',
+                      transform: `scale(${zoomLevel})`,
+                      transformOrigin: 'center center',
+                      transition: 'transform 0.2s'
+                    }}>
+                      <img 
+                        src={previewFile.url} 
+                        alt='Certificate' 
+                        style={{ 
+                          maxWidth: '100%', 
+                          maxHeight: '100%', 
+                          objectFit: 'contain',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                          background: '#fff',
+                          padding: '8px'
+                        }} 
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      flex: 1, 
+                      overflow: 'hidden',
+                      transform: `scale(${zoomLevel})`,
+                      transformOrigin: 'top left',
+                      transition: 'transform 0.2s',
+                      width: `${100 / zoomLevel}%`,
+                      height: `${100 / zoomLevel}%`
+                    }}>
+                      <PdfViewer 
+                        file={previewFile.blob || previewFile.url} 
+                        initialMode="fit" 
+                        showControls={false}
                   />
                 </div>
+                  )}
+                  {/* Zoom controls */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '80px',
+                    right: '24px',
+                    display: 'flex',
+                    gap: '8px',
+                    background: 'white',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                    zIndex: 10
+                  }}>
+                    <button
+                      className='btn btn-ghost'
+                      onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))}
+                      style={{ padding: '8px 12px', fontSize: '18px', minWidth: '40px' }}
+                      title="Thu nhỏ"
+                    >
+                      −
+                    </button>
+                    <span style={{ 
+                      fontSize: '14px', 
+                      color: '#666', 
+                      minWidth: '60px', 
+                      textAlign: 'center',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}>
+                      {Math.round(zoomLevel * 100)}%
+                    </span>
+                    <button
+                      className='btn btn-ghost'
+                      onClick={() => setZoomLevel(z => Math.min(2, z + 0.1))}
+                      style={{ padding: '8px 12px', fontSize: '18px', minWidth: '40px' }}
+                      title="Phóng to"
+                    >
+                      +
+                    </button>
+                    <button
+                      className='btn btn-ghost'
+                      onClick={() => setZoomLevel(1)}
+                      style={{ padding: '8px 12px', fontSize: '12px', marginLeft: '4px' }}
+                      title="Reset zoom"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </>
               ) : (
-                <div className='loading-state'>Đang tải file...</div>
+                <div className='loading-state' style={{ 
+                  flex: 1, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center' 
+                }}>
+                  Đang tải file...
+                </div>
               )}
             </div>
-            <div className='modal-actions'>
-              <button className='btn btn-ghost' onClick={() => {
-                if (previewUrl) URL.revokeObjectURL(previewUrl)
+            <div className='modal-actions' style={{ flexShrink: 0, padding: '16px 24px' }}>
+              <button
+                className='btn btn-ghost'
+                onClick={() => {
+                  if (previewFile) URL.revokeObjectURL(previewFile.url)
                 setShowPreviewModal(false)
                 setPreviewCert(null)
-                setPreviewUrl(null)
+                  setPreviewFile(null)
                 setPreviewError(null)
-              }}>
+                  setZoomLevel(1)
+                }}
+              >
                 Đóng
               </button>
             </div>

@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
+import { IconPencil, IconTrash } from '@tabler/icons-react'
 import IconButton from '../components/IconButton'
+import { getIconColor } from '../utils/iconColors'
+import { getPageNumbers } from '../utils/common'
 import { 
   listCredentialTypes, 
   createCredentialType, 
@@ -40,6 +43,13 @@ export default function CredentialManagement() {
     periodDays: '' as string | number, 
     note: '' 
   })
+  // Lưu các validity options đang chờ được tạo (khi tạo credential type mới)
+  const [pendingValidityOptions, setPendingValidityOptions] = useState<Array<{
+    id: string
+    periodMonths: number | null
+    periodDays: number | null
+    note: string | null
+  }>>([])
 
   // Load credential types
   const loadCredentialTypes = useCallback(async (page?: number, limit?: number) => {
@@ -81,7 +91,6 @@ export default function CredentialManagement() {
       const response = await listValidityOptions(credentialTypeId)
       setCurrentTypeValidityOptions(response.items || [])
     } catch (error: any) {
-      console.error('Error loading validity options:', error)
       setCurrentTypeValidityOptions([])
     } finally {
       setIsLoadingOptions(false)
@@ -115,6 +124,17 @@ export default function CredentialManagement() {
     }
   }, [showTypeModal, editingType, typeForm.id, typeForm.isPermanent, loadValidityOptionsForType])
 
+  // Helper functions
+  const resetTypeForm = () => {
+    setTypeForm({ id: '', name: '', isPermanent: false })
+    setCurrentTypeValidityOptions([])
+    setPendingValidityOptions([])
+  }
+
+  const resetOptionForm = () => {
+    setOptionForm({ id: '', periodMonths: '', periodDays: '', note: '' })
+  }
+
   // Credential Types handlers
   const openTypeModal = (type?: CredentialType) => {
     if (type) {
@@ -122,8 +142,7 @@ export default function CredentialManagement() {
       setTypeForm({ id: type.id, name: type.name, isPermanent: type.isPermanent })
     } else {
       setEditingType(null)
-      setTypeForm({ id: '', name: '', isPermanent: false })
-      setCurrentTypeValidityOptions([])
+      resetTypeForm()
     }
     setShowTypeModal(true)
   }
@@ -131,8 +150,7 @@ export default function CredentialManagement() {
   const closeTypeModal = () => {
     setShowTypeModal(false)
     setEditingType(null)
-    setTypeForm({ id: '', name: '', isPermanent: false })
-    setCurrentTypeValidityOptions([])
+    resetTypeForm()
     setShowOptionModal(false)
     setEditingOption(null)
   }
@@ -150,14 +168,44 @@ export default function CredentialManagement() {
           isPermanent: typeForm.isPermanent
         })
       } else {
+        // Tạo credential type mới
         await createCredentialType({
           id: typeForm.id.trim(),
           name: typeForm.name.trim(),
           isPermanent: typeForm.isPermanent
         })
+
+        // Nếu có pending validity options, tạo chúng sau khi credential type đã được tạo
+        if (pendingValidityOptions.length > 0 && !typeForm.isPermanent) {
+          await Promise.allSettled(
+            pendingValidityOptions.map(option =>
+              createValidityOption({
+                id: option.id,
+                credentialTypeId: typeForm.id.trim(),
+                periodMonths: option.periodMonths,
+                periodDays: option.periodDays,
+                note: option.note
+              })
+            )
+          )
+        }
+
+        // Khi tạo mới, quay về trang 1 và refresh danh sách
+        closeTypeModal()
+        // Clear danh sách trước để hiển thị loading
+        setCredentialTypes([])
+        // Clear search filter để đảm bảo item mới hiển thị
+        setTypeSearchText('')
+        setTypeAppliedSearch('')
+        // Reset về trang 1
+        setTypePagination(prev => ({ ...prev, page: 1 }))
+        // Load lại từ trang 1 (không có search filter)
+        await loadCredentialTypes(1, typeLimit)
+        return
       }
       closeTypeModal()
-      loadCredentialTypes(typePagination.page, typeLimit)
+      // Khi update, giữ nguyên trang hiện tại
+      await loadCredentialTypes(typePagination.page, typeLimit)
     } catch (error: any) {
       alert(error.message || 'Có lỗi xảy ra')
     }
@@ -196,12 +244,7 @@ export default function CredentialManagement() {
       })
     } else {
       setEditingOption(null)
-      setOptionForm({ 
-        id: '', 
-        periodMonths: '', 
-        periodDays: '', 
-        note: '' 
-      })
+      resetOptionForm()
     }
     setShowOptionModal(true)
   }
@@ -209,7 +252,7 @@ export default function CredentialManagement() {
   const closeOptionModal = () => {
     setShowOptionModal(false)
     setEditingOption(null)
-    setOptionForm({ id: '', periodMonths: '', periodDays: '', note: '' })
+    resetOptionForm()
   }
 
   const handleOptionSubmit = async () => {
@@ -234,25 +277,63 @@ export default function CredentialManagement() {
 
     try {
       if (editingOption) {
-        await updateValidityOption(editingOption.id, {
-          credentialTypeId: currentCredentialTypeId,
-          periodMonths,
-          periodDays,
-          note: optionForm.note.trim() || null
-        })
+        // Cập nhật option
+        if (editingType) {
+          // Nếu đang sửa credential type đã tồn tại, cập nhật option trong backend
+          await updateValidityOption(editingOption.id, {
+            credentialTypeId: currentCredentialTypeId,
+            periodMonths,
+            periodDays,
+            note: optionForm.note.trim() || null
+          })
+          closeOptionModal()
+          loadValidityOptionsForType(currentCredentialTypeId)
+        } else {
+          // Nếu đang tạo credential type mới, cập nhật option trong pending list
+          setPendingValidityOptions(prev => prev.map(opt => 
+            opt.id === editingOption.id 
+              ? { id: editingOption.id, periodMonths, periodDays, note: optionForm.note.trim() || null }
+              : opt
+          ))
+          setCurrentTypeValidityOptions(prev => prev.map(opt => 
+            opt.id === editingOption.id
+              ? { ...opt, periodMonths, periodDays, note: optionForm.note.trim() || '' }
+              : opt
+          ))
+          closeOptionModal()
+        }
       } else {
-        await createValidityOption({
-          id: optionForm.id.trim(),
-          credentialTypeId: currentCredentialTypeId,
-          periodMonths,
-          periodDays,
-          note: optionForm.note.trim() || null
-        })
-      }
-      closeOptionModal()
-      // Reload validity options for current credential type
-      if (currentCredentialTypeId) {
-        loadValidityOptionsForType(currentCredentialTypeId)
+        // Tạo option mới
+        if (editingType) {
+          // Nếu đang sửa credential type đã tồn tại, tạo option ngay
+          await createValidityOption({
+            id: optionForm.id.trim(),
+            credentialTypeId: currentCredentialTypeId,
+            periodMonths,
+            periodDays,
+            note: optionForm.note.trim() || null
+          })
+          closeOptionModal()
+          loadValidityOptionsForType(currentCredentialTypeId)
+        } else {
+          // Nếu đang tạo credential type mới, lưu vào pending list
+          const newOption = {
+            id: optionForm.id.trim(),
+            periodMonths,
+            periodDays,
+            note: optionForm.note.trim() || null
+          }
+          setPendingValidityOptions(prev => [...prev, newOption])
+          // Thêm vào danh sách hiển thị
+          setCurrentTypeValidityOptions(prev => [...prev, {
+            ...newOption,
+            credentialTypeId: currentCredentialTypeId,
+            note: newOption.note || '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          } as CredentialValidityOption])
+          closeOptionModal()
+        }
       }
     } catch (error: any) {
       alert(error.message || 'Có lỗi xảy ra')
@@ -263,6 +344,15 @@ export default function CredentialManagement() {
     if (!confirm(`Bạn có chắc chắn muốn xóa tùy chọn thời hạn "${id}"?`)) return
 
     const currentCredentialTypeId = editingType?.id || typeForm.id
+
+    // Nếu đang tạo credential type mới, chỉ xóa khỏi pending list
+    if (!editingType) {
+      setPendingValidityOptions(prev => prev.filter(opt => opt.id !== id))
+      setCurrentTypeValidityOptions(prev => prev.filter(opt => opt.id !== id))
+      return
+    }
+
+    // Nếu đang sửa credential type đã tồn tại, xóa từ backend
     try {
       await deleteValidityOption(id)
       // Reload validity options for current credential type
@@ -370,8 +460,8 @@ export default function CredentialManagement() {
             <table className='table' style={{ tableLayout: 'fixed', width: '100%' }}>
               <thead>
                 <tr>
-                  <th style={{ width: '25%' }}>ID</th>
-                  <th style={{ width: '40%' }}>Tên</th>
+                  <th style={{ width: '25%', textAlign: 'center' }}>ID</th>
+                  <th style={{ width: '40%', textAlign: 'center' }}>Tên</th>
                   <th style={{ width: '20%', textAlign: 'center' }}>Thời hạn</th>
                   <th style={{ width: '15%', textAlign: 'center' }}>Thao tác</th>
                 </tr>
@@ -386,32 +476,50 @@ export default function CredentialManagement() {
                 ) : (
                   credentialTypes.map((type) => (
                     <tr key={type.id}>
-                      <td style={{ padding: '12px', wordBreak: 'break-word' }}>
-                        <code style={{ fontSize: '12px' }}>{type.id}</code>
+                      <td style={{ padding: '8px', textAlign: 'center', wordBreak: 'break-word' }}>
+                        <code style={{ fontSize: '11px', fontFamily: 'monospace', color: '#6b7280' }}>{type.id}</code>
                       </td>
-                      <td style={{ padding: '12px', wordBreak: 'break-word' }}>{type.name}</td>
-                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                      <td style={{ padding: '8px', textAlign: 'center', wordBreak: 'break-word', fontSize: '13px' }}>{type.name}</td>
+                      <td style={{ padding: '8px', textAlign: 'center' }}>
                         {type.isPermanent ? (
-                          <span className='badge-soft' style={{ background: 'rgba(5, 150, 105, 0.1)', color: '#059669' }}>
+                          <span className='badge-soft' style={{ 
+                            background: 'rgba(5, 150, 105, 0.12)', 
+                            color: '#059669',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            display: 'inline-block'
+                          }}>
                             ✓ Vĩnh viễn
                           </span>
                         ) : (
-                          <span className='badge-soft' style={{ background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb' }}>
+                          <span className='badge-soft' style={{ 
+                            background: 'rgba(37, 99, 235, 0.12)', 
+                            color: '#2563eb',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            display: 'inline-block'
+                          }}>
                             Có thời hạn
                           </span>
                         )}
                       </td>
-                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                      <td style={{ padding: '8px', textAlign: 'center' }}>
                         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                           <IconButton
-                            icon='✏️'
+                            icon={<IconPencil size={16} />}
                             label='Sửa'
+                            iconColor={getIconColor('edit')}
                             onClick={() => openTypeModal(type)}
                             variant='ghost'
                           />
                           <IconButton
-                            icon='🗑️'
+                            icon={<IconTrash size={16} />}
                             label='Xóa'
+                            iconColor={getIconColor('delete')}
                             onClick={() => handleTypeDelete(type.id)}
                             variant='danger'
                           />
@@ -426,61 +534,44 @@ export default function CredentialManagement() {
 
           {/* Pagination */}
           {typePagination.total > 0 && (
-            <div className='pagination' style={{ padding: '16px', borderTop: '1px solid #eee' }}>
-              <span className='pagination-info'>
-                Trang {typePagination.page} / {typePagination.totalPages} (Tổng: {typePagination.total} loại văn bằng)
+            <div className='pagination' style={{ marginTop: '16px', padding: '12px', fontSize: '14px' }}>
+              <span className='pagination-info' style={{ fontSize: '13px', color: '#64748b' }}>
+                Trang {typePagination.page} / {typePagination.totalPages} (Tổng: {typePagination.total})
               </span>
               {typePagination.totalPages > 1 && (
-                <div className='pagination-actions'>
+                <div className='pagination-actions' style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <button 
                     className='btn btn-ghost' 
                     onClick={() => loadCredentialTypes(typePagination.page - 1, typeLimit)} 
                     disabled={typePagination.page <= 1 || isLoadingTypes}
+                    style={{ padding: '6px 12px', fontSize: '13px' }}
                   >
                     ‹ Trước
                   </button>
-                  <div className='pagination-numbers'>
-                    {(() => {
-                      const pages: (number | string)[] = []
-                      const { page: current, totalPages } = typePagination
-                      
-                      if (totalPages <= 7) {
-                        for (let i = 1; i <= totalPages; i++) {
-                          pages.push(i)
-                        }
-                      } else {
-                        pages.push(1)
-                        if (current > 3) pages.push('...')
-                        const start = Math.max(2, current - 1)
-                        const end = Math.min(totalPages - 1, current + 1)
-                        for (let i = start; i <= end; i++) {
-                          pages.push(i)
-                        }
-                        if (current < totalPages - 2) pages.push('...')
-                        pages.push(totalPages)
+                  <div className='pagination-numbers' style={{ display: 'flex', gap: '4px' }}>
+                    {getPageNumbers(typePagination.page, typePagination.totalPages).map((pageNum, idx) => {
+                      if (pageNum === '...') {
+                        return <span key={`ellipsis-${idx}`} className='pagination-ellipsis' style={{ padding: '6px 8px' }}>...</span>
                       }
-                      
-                      return pages.map((pageNum, idx) => {
-                        if (pageNum === '...') {
-                          return <span key={`ellipsis-${idx}`} className='pagination-ellipsis'>...</span>
-                        }
-                        return (
-                          <button
-                            key={pageNum}
-                            onClick={() => loadCredentialTypes(pageNum as number, typeLimit)}
-                            className={`btn ${pageNum === current ? 'btn-primary' : 'btn-ghost'} pagination-number`}
-                            disabled={isLoadingTypes}
-                          >
-                            {pageNum}
-                          </button>
-                        )
-                      })
-                    })()}
+                      const pageNumValue = pageNum as number
+                      return (
+                        <button
+                          key={pageNumValue}
+                          onClick={() => loadCredentialTypes(pageNumValue, typeLimit)}
+                          className={`btn ${pageNumValue === typePagination.page ? 'btn-primary' : 'btn-ghost'} pagination-number`}
+                          disabled={isLoadingTypes}
+                          style={{ padding: '6px 10px', fontSize: '13px', minWidth: '36px' }}
+                        >
+                          {pageNumValue}
+                        </button>
+                      )
+                    })}
                   </div>
                   <button 
                     className='btn btn-ghost' 
                     onClick={() => loadCredentialTypes(typePagination.page + 1, typeLimit)} 
                     disabled={typePagination.page >= typePagination.totalPages || isLoadingTypes}
+                    style={{ padding: '6px 12px', fontSize: '13px' }}
                   >
                     Sau ›
                   </button>
@@ -616,33 +707,35 @@ export default function CredentialManagement() {
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead style={{ background: '#f9fafb' }}>
                           <tr>
-                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '13px', fontWeight: '600', borderBottom: '1px solid #eee' }}>ID</th>
-                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '13px', fontWeight: '600', borderBottom: '1px solid #eee' }}>Thời hạn</th>
-                            <th style={{ padding: '12px', textAlign: 'left', fontSize: '13px', fontWeight: '600', borderBottom: '1px solid #eee' }}>Ghi chú</th>
-                            <th style={{ padding: '12px', textAlign: 'right', fontSize: '13px', fontWeight: '600', borderBottom: '1px solid #eee' }}>Thao tác</th>
+                            <th style={{ padding: '8px', textAlign: 'center', fontSize: '12px', fontWeight: '600', borderBottom: '1px solid #eee' }}>ID</th>
+                            <th style={{ padding: '8px', textAlign: 'center', fontSize: '12px', fontWeight: '600', borderBottom: '1px solid #eee' }}>Thời hạn</th>
+                            <th style={{ padding: '8px', textAlign: 'center', fontSize: '12px', fontWeight: '600', borderBottom: '1px solid #eee' }}>Ghi chú</th>
+                            <th style={{ padding: '8px', textAlign: 'center', fontSize: '12px', fontWeight: '600', borderBottom: '1px solid #eee' }}>Thao tác</th>
                           </tr>
                         </thead>
                         <tbody>
                           {currentTypeValidityOptions.map((option) => (
                             <tr key={option.id} style={{ borderBottom: '1px solid #eee' }}>
-                              <td style={{ padding: '12px', fontSize: '12px' }}>
-                                <code style={{ fontSize: '11px', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px' }}>
+                              <td style={{ padding: '8px', textAlign: 'center', fontSize: '11px' }}>
+                                <code style={{ fontSize: '10px', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontFamily: 'monospace', color: '#6b7280' }}>
                                   {option.id}
                                 </code>
                               </td>
-                              <td style={{ padding: '12px', fontWeight: '500' }}>{formatPeriod(option)}</td>
-                              <td style={{ padding: '12px', color: '#666', fontSize: '13px' }}>{option.note || '-'}</td>
-                              <td style={{ padding: '12px', textAlign: 'right' }}>
-                                <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+                              <td style={{ padding: '8px', textAlign: 'center', fontWeight: '500', fontSize: '12px' }}>{formatPeriod(option)}</td>
+                              <td style={{ padding: '8px', textAlign: 'center', color: '#666', fontSize: '12px' }}>{option.note || '-'}</td>
+                              <td style={{ padding: '8px', textAlign: 'center' }}>
+                                <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                                   <IconButton
-                                    icon='✏️'
+                                    icon={<IconPencil size={16} />}
                                     label='Sửa'
+                                    iconColor={getIconColor('edit')}
                                     onClick={() => openOptionModal(option)}
                                     variant='ghost'
                                   />
                                   <IconButton
-                                    icon='🗑️'
+                                    icon={<IconTrash size={16} />}
                                     label='Xóa'
+                                    iconColor={getIconColor('delete')}
                                     onClick={() => handleOptionDelete(option.id)}
                                     variant='danger'
                                   />
