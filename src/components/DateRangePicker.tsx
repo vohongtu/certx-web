@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { formatDateLocal, parseDateLocal } from '../utils/format'
 
 interface DateRangePickerProps {
   startDate: string | null
@@ -31,8 +32,12 @@ export default function DateRangePicker({
   today.setHours(0, 0, 0, 0)
   
   const [currentMonth, setCurrentMonth] = useState(() => {
-    const date = startDate ? new Date(startDate) : new Date()
-    return { year: date.getFullYear(), month: date.getMonth() }
+    if (startDate) {
+      const date = parseDateLocal(startDate)
+      return { year: date.getFullYear(), month: date.getMonth() }
+    }
+    const today = new Date()
+    return { year: today.getFullYear(), month: today.getMonth() }
   })
 
   // Tính toán tháng thứ hai (tháng tiếp theo)
@@ -68,37 +73,39 @@ export default function DateRangePicker({
 
   const isDateDisabled = (date: Date): boolean => {
     if (minDate) {
-      const min = new Date(minDate)
+      const min = parseDateLocal(minDate)
       min.setHours(0, 0, 0, 0)
-      if (date < min) return true
+      const dateNormalized = new Date(date)
+      dateNormalized.setHours(0, 0, 0, 0)
+      if (dateNormalized < min) return true
     }
     
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = formatDateLocal(date)
     return disabledDates.includes(dateStr)
   }
 
   const isDateInRange = (date: Date): boolean => {
     if (!startDate || !endDate) return false
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = formatDateLocal(date)
     return dateStr > startDate && dateStr < endDate
   }
 
   const isStartDate = (date: Date): boolean => {
     if (!startDate) return false
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = formatDateLocal(date)
     return dateStr === startDate
   }
 
   const isEndDate = (date: Date): boolean => {
     if (!endDate) return false
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = formatDateLocal(date)
     return dateStr === endDate
   }
 
   const handleDateClick = (date: Date) => {
     if (isDateDisabled(date)) return
 
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = formatDateLocal(date)
 
     // Logic chọn ngày linh hoạt:
     // 1. Nếu chưa có startDate: đặt làm startDate
@@ -159,7 +166,7 @@ export default function DateRangePicker({
             const inRange = isDateInRange(date)
             const isStart = isStartDate(date)
             const isEnd = isEndDate(date)
-            const dateStr = date.toISOString().split('T')[0]
+            const dateStr = formatDateLocal(date)
 
             return (
               <button

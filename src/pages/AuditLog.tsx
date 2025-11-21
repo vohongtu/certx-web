@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { decodeJwt } from '../utils/jwt'
 import { listAuditLogs, getAuditStats, AuditLog as AuditLogEntry, AuditLogFilters, AuditAction, AuditStatus } from '../api/audit.api'
 import { usePagination } from '../hooks/usePagination'
-import { formatDateShort } from '../utils/format'
+import { formatDateShort, parseDateLocal } from '../utils/format'
 import DateRangePicker from '../components/DateRangePicker'
 
 const DEFAULT_PAGE_LIMIT = 5
@@ -369,9 +369,9 @@ export default function AuditLog() {
               >
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                   {startDate && endDate 
-                    ? `${new Date(startDate).toLocaleDateString('vi-VN')} - ${new Date(endDate).toLocaleDateString('vi-VN')}`
+                    ? `${parseDateLocal(startDate).toLocaleDateString('vi-VN')} - ${parseDateLocal(endDate).toLocaleDateString('vi-VN')}`
                     : startDate
-                    ? `${new Date(startDate).toLocaleDateString('vi-VN')} - ...`
+                    ? `${parseDateLocal(startDate).toLocaleDateString('vi-VN')} - ...`
                     : 'Chọn khoảng thời gian'}
                 </span>
                 <IconCalendar size={16} style={{ color: '#9ca3af', flexShrink: 0, marginLeft: '8px' }} />

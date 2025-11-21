@@ -280,12 +280,12 @@ export default function CredentialManagement() {
         // Cập nhật option
         if (editingType) {
           // Nếu đang sửa credential type đã tồn tại, cập nhật option trong backend
-          await updateValidityOption(editingOption.id, {
-            credentialTypeId: currentCredentialTypeId,
-            periodMonths,
-            periodDays,
-            note: optionForm.note.trim() || null
-          })
+        await updateValidityOption(editingOption.id, {
+          credentialTypeId: currentCredentialTypeId,
+          periodMonths,
+          periodDays,
+          note: optionForm.note.trim() || null
+        })
           closeOptionModal()
           loadValidityOptionsForType(currentCredentialTypeId)
         } else {
@@ -306,13 +306,13 @@ export default function CredentialManagement() {
         // Tạo option mới
         if (editingType) {
           // Nếu đang sửa credential type đã tồn tại, tạo option ngay
-          await createValidityOption({
-            id: optionForm.id.trim(),
-            credentialTypeId: currentCredentialTypeId,
-            periodMonths,
-            periodDays,
-            note: optionForm.note.trim() || null
-          })
+        await createValidityOption({
+          id: optionForm.id.trim(),
+          credentialTypeId: currentCredentialTypeId,
+          periodMonths,
+          periodDays,
+          note: optionForm.note.trim() || null
+        })
           closeOptionModal()
           loadValidityOptionsForType(currentCredentialTypeId)
         } else {
@@ -332,7 +332,7 @@ export default function CredentialManagement() {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           } as CredentialValidityOption])
-          closeOptionModal()
+      closeOptionModal()
         }
       }
     } catch (error: any) {
@@ -550,21 +550,21 @@ export default function CredentialManagement() {
                   </button>
                   <div className='pagination-numbers' style={{ display: 'flex', gap: '4px' }}>
                     {getPageNumbers(typePagination.page, typePagination.totalPages).map((pageNum, idx) => {
-                      if (pageNum === '...') {
+                        if (pageNum === '...') {
                         return <span key={`ellipsis-${idx}`} className='pagination-ellipsis' style={{ padding: '6px 8px' }}>...</span>
-                      }
+                        }
                       const pageNumValue = pageNum as number
-                      return (
-                        <button
+                        return (
+                          <button
                           key={pageNumValue}
                           onClick={() => loadCredentialTypes(pageNumValue, typeLimit)}
                           className={`btn ${pageNumValue === typePagination.page ? 'btn-primary' : 'btn-ghost'} pagination-number`}
-                          disabled={isLoadingTypes}
+                            disabled={isLoadingTypes}
                           style={{ padding: '6px 10px', fontSize: '13px', minWidth: '36px' }}
-                        >
+                          >
                           {pageNumValue}
-                        </button>
-                      )
+                          </button>
+                        )
                     })}
                   </div>
                   <button 

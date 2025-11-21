@@ -18,7 +18,7 @@ export default function Manage() {
   const [certs, setCerts] = useState<CertSummary[]>([])
   const [status, setStatus] = useState<'ALL' | CertStatus>('ALL')
   const [isLoading, setIsLoading] = useState(false)
-
+  
   const { pagination, page, limit, setPage, setLimit, updatePagination } = usePagination({ defaultLimit: DEFAULT_PAGE_LIMIT })
   const { searchText, appliedSearch, setSearchText } = useSearch()
   const [error, setError] = useState<string | null>(null)
@@ -39,7 +39,7 @@ export default function Manage() {
     const requestedLimit = targetLimit ?? limit
     const requestedSearch = search !== undefined ? search : appliedSearch
     const requestedStatus = targetStatus !== undefined ? targetStatus : status
-
+    
     // Clear certs ngay lập tức khi filter thay đổi
     setCerts([])
     setIsLoading(true)
@@ -253,14 +253,14 @@ export default function Manage() {
                           />
                         )}
                         {cert.status === 'REJECTED' && cert.allowReupload && !hasPendingReup(cert.id) && (
-                          <IconButton
+                            <IconButton
                             icon={<IconCloudUpload size={16} />}
-                            label='Gửi lại'
-                            iconColor={getIconColor('reupload')}
-                            onClick={() => openReuploadModal(cert)}
-                            disabled={isReuploading}
-                            variant='outline'
-                          />
+                              label='Gửi lại'
+                              iconColor={getIconColor('reupload')}
+                              onClick={() => openReuploadModal(cert)}
+                              disabled={isReuploading}
+                              variant='outline'
+                            />
                         )}
                       </div>
                     </td>
@@ -407,13 +407,13 @@ export default function Manage() {
                   </a>
                 )}
                 {cert.status === 'REJECTED' && cert.allowReupload && !hasPendingReup(cert.id) && (
-                  <button
-                    className='btn btn-primary'
-                    onClick={() => openReuploadModal(cert)}
-                    disabled={isReuploading}
-                  >
-                    Reup
-                  </button>
+                    <button
+                      className='btn btn-primary'
+                      onClick={() => openReuploadModal(cert)}
+                      disabled={isReuploading}
+                    >
+                      Reup
+                    </button>
                 )}
               </div>
             </div>

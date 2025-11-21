@@ -86,12 +86,12 @@ export default function UserManage() {
 
   // Create/Update user
   const handleSaveUser = async () => {
-    // Validate: Nếu tạo ADMIN hoặc SUPER_ADMIN thì phải có address
-    if (!editingUser && (userForm.role === 'ADMIN' || userForm.role === 'SUPER_ADMIN') && !userForm.address.trim()) {
-      alert(`Tài khoản ${userForm.role === 'SUPER_ADMIN' ? 'super admin' : 'admin'} cần có địa chỉ ETH`)
-      return
-    }
-    
+      // Validate: Nếu tạo ADMIN hoặc SUPER_ADMIN thì phải có address
+      if (!editingUser && (userForm.role === 'ADMIN' || userForm.role === 'SUPER_ADMIN') && !userForm.address.trim()) {
+        alert(`Tài khoản ${userForm.role === 'SUPER_ADMIN' ? 'super admin' : 'admin'} cần có địa chỉ ETH`)
+        return
+      }
+      
     setIsSaving(true)
     try {
       if (editingUser) {
@@ -105,15 +105,15 @@ export default function UserManage() {
       }
       
       // Reset form và đóng modal
-      setEditingUser(null)
-      setUserForm({ 
-        email: '', 
-        password: '', 
-        name: '', 
-        address: '', 
-        role: 'USER', 
-        enabled: true 
-      })
+        setEditingUser(null)
+        setUserForm({ 
+          email: '', 
+          password: '', 
+          name: '', 
+          address: '', 
+          role: 'USER', 
+          enabled: true 
+        })
       setShowUserModal(false)
       
       // Refresh danh sách - nếu tạo mới, quay về trang 1 để thấy user mới
