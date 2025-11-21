@@ -156,12 +156,6 @@ export default function Verify() {
               <div className='alert'>Không tìm thấy chứng chỉ với hash này.</div>
             ) : (
               <>
-                {source === 'db' && (
-                  <div className='alert alert-warning'>
-                    ⚠️ Dữ liệu đang lấy từ bộ nhớ off-chain. Giao dịch on-chain có thể đang chờ xác nhận.
-                  </div>
-                )}
-
                 <ul className='meta-list'>
                   {/* Hiển thị StatusBadge nổi bật ở đầu danh sách */}
                   <li className='meta-item' style={{ borderBottom: '2px solid #e5e7eb', paddingBottom: '16px', marginBottom: '12px' }}>

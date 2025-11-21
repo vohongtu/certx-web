@@ -75,6 +75,7 @@ export default function AdminManage() {
   const [transferNewUserId, setTransferNewUserId] = useState<string | null>(null)
   const [transferNote, setTransferNote] = useState('')
   const [transferHolderName, setTransferHolderName] = useState('')
+  const [isUpdatingExpiration, setIsUpdatingExpiration] = useState(false)
 
   // Fetch certs
   const fetchCerts = async (page?: number, limit?: number, search?: string, status?: 'ALL' | CertStatus) => {
@@ -328,6 +329,7 @@ export default function AdminManage() {
       return
     }
 
+    setIsUpdatingExpiration(true)
     try {
       const finalExpirationDate = calculateExpirationDate()
 
@@ -342,6 +344,8 @@ export default function AdminManage() {
       await fetchCerts(certPage, certLimit, certAppliedSearch, certStatus)
     } catch (err: any) {
       alert(err.message || 'Không thể cập nhật thời gian tồn tại')
+    } finally {
+      setIsUpdatingExpiration(false)
     }
   }
 
@@ -1332,13 +1336,19 @@ export default function AdminManage() {
               )}
             </div>
             <div className='modal-actions'>
-              <button className='btn btn-ghost' onClick={() => { setShowUpdateExpirationModal(false); setExpirationDate(''); setSelectedValidityOptionId(''); setUseCustomExpiration(false); setCertIssuedDate('') }}>Hủy</button>
+              <button 
+                className='btn btn-ghost' 
+                onClick={() => { setShowUpdateExpirationModal(false); setExpirationDate(''); setSelectedValidityOptionId(''); setUseCustomExpiration(false); setCertIssuedDate('') }}
+                disabled={isUpdatingExpiration}
+              >
+                Hủy
+              </button>
               <button 
                 className='btn btn-primary' 
                 onClick={handleUpdateExpiration}
-                disabled={!certIssuedDate || isLoadingValidityOptions || (!isPermanent && !expirationDate && !selectedValidityOptionId && !useCustomExpiration)}
+                disabled={isUpdatingExpiration || !certIssuedDate || isLoadingValidityOptions || (!isPermanent && !expirationDate && !selectedValidityOptionId && !useCustomExpiration)}
               >
-                Cập nhật
+                {isUpdatingExpiration ? 'Đang cập nhật...' : 'Cập nhật'}
               </button>
             </div>
           </div>
