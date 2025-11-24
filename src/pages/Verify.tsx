@@ -10,6 +10,7 @@ import { calculateStatus } from '../utils/status'
 import { useAuth } from '../hooks/useAuth'
 import { decodeJwt } from '../utils/jwt'
 import QRViewer from '../components/QRViewer'
+import { decodeFileFromMetadata, detectFileTypeFromBytes } from '../utils/fileDecoder'
 
 type VerifyResult = {
   status: CertStatus | 'NOT_FOUND'
@@ -23,7 +24,6 @@ export default function Verify() {
   const [hash, setHash] = useState(sp.get('hash') || '')
   const [res, setRes] = useState<VerifyResult | null>(null)
   const [file, setFile] = useState<{ url: string; mimeType: string; blob?: Blob } | null>(null)
-  const [source, setSource] = useState<'chain' | 'db' | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showPreviewModal, setShowPreviewModal] = useState(false)
@@ -50,37 +50,50 @@ export default function Verify() {
     setError(null)
     setRes(null)
     setFile(null)
-    setSource(null)
 
     try {
-      const { status, metadataURI, source: apiSource } = await verifyHash(hash)
+      const { status, metadataURI } = await verifyHash(hash)
 
       if (status === 'NOT_FOUND' || !metadataURI) {
         setRes({ status: 'NOT_FOUND', data: null, metadataUri: undefined })
-        setSource(apiSource ?? null)
         return
       }
 
       const data = await getCertIPFSData(metadataURI)
       const metadataUri = metadataURI
-      setSource(apiSource ?? 'chain')
 
       // Tính toán status dựa trên expirationDate từ metadata
       const finalStatus = calculateStatus(status, data.expirationDate)
 
-      let uint8Array: Uint8Array | null = null
+      // Decode file từ metadata
       const filePayload = (data as any)?.file
+      const uint8Array = decodeFileFromMetadata(filePayload)
 
-      if (filePayload?.data) uint8Array = new Uint8Array(filePayload.data)
-      else if (Array.isArray(filePayload)) uint8Array = new Uint8Array(filePayload)
+      if (uint8Array && uint8Array.length > 0) {
+        // Detect mimeType từ bytes
+        const detectedMimeType = detectFileTypeFromBytes(uint8Array)
+        const storedMimeType = data.mimeType || 'application/pdf'
+        const finalMimeType = detectedMimeType !== 'unknown' ? detectedMimeType : storedMimeType
+        
+        // Validate PDF nếu được đánh dấu là PDF
+        const isPDF = uint8Array.length >= 4 && 
+          String.fromCharCode(uint8Array[0], uint8Array[1], uint8Array[2], uint8Array[3]) === '%PDF'
 
-      if (uint8Array) {
-        const mimeType = data.mimeType || 'application/pdf'
-        const normalized = Uint8Array.from(uint8Array)
-        const blob = new Blob([normalized], { type: mimeType })
-        // Tạo URL cho image, giữ Blob cho PDF để truyền trực tiếp
+        // Tạo Blob từ Uint8Array
+        const normalized = new Uint8Array(uint8Array)
+        const blob = new Blob([normalized], { type: finalMimeType })
         const url = URL.createObjectURL(blob)
-        setFile({ url, mimeType, blob: mimeType.startsWith('image/') ? undefined : blob })
+
+        if (storedMimeType === 'application/pdf' && !isPDF && detectedMimeType.startsWith('image/')) {
+          // File được đánh dấu là PDF nhưng thực tế là image
+          setFile({ url, mimeType: detectedMimeType, blob: undefined })
+        } else if (storedMimeType === 'application/pdf' && !isPDF && !detectedMimeType.startsWith('image/')) {
+          setError('File PDF không hợp lệ. Header không đúng định dạng.')
+        } else {
+          setFile({ url, mimeType: finalMimeType, blob: finalMimeType.startsWith('image/') ? undefined : blob })
+        }
+      } else {
+        setError('Không tìm thấy file trong metadata. Vui lòng thử lại sau.')
       }
 
       setRes({ status: finalStatus, data, metadataUri })
@@ -88,7 +101,6 @@ export default function Verify() {
       console.error('Verify error:', err)
       setFile(null)
       setRes(null)
-      setSource(null)
       setError(err.response?.data?.message || err.message || 'Có lỗi xảy ra khi tra cứu chứng chỉ')
     } finally {
       setIsLoading(false)
@@ -173,7 +185,7 @@ export default function Verify() {
                   ))}
                 </ul>
 
-                {res && res.status !== 'NOT_FOUND' && hash && (
+                {res && (res.status === 'VALID' || res.status === 'REVOKED' || res.status === 'EXPIRED') && hash && (
                   <div className='field' style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #e5e7eb' }}>
                     <label style={{ fontSize: '14px', marginBottom: '8px', fontWeight: '500' }}>QR Code xác thực</label>
                     <QRViewer value={`${typeof window !== 'undefined' ? window.location.origin : ''}/verify?hash=${hash}`} />
