@@ -9,6 +9,7 @@ import { formatDateShort, formatDateRange } from '../utils/format'
 import { calculateStatus } from '../utils/status'
 import { useAuth } from '../hooks/useAuth'
 import { decodeJwt } from '../utils/jwt'
+import QRViewer from '../components/QRViewer'
 
 type VerifyResult = {
   status: CertStatus | 'NOT_FOUND'
@@ -172,9 +173,18 @@ export default function Verify() {
                   ))}
                 </ul>
 
+                {res && res.status !== 'NOT_FOUND' && hash && (
+                  <div className='field' style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #e5e7eb' }}>
+                    <label style={{ fontSize: '14px', marginBottom: '8px', fontWeight: '500' }}>QR Code xác thực</label>
+                    <QRViewer value={`${typeof window !== 'undefined' ? window.location.origin : ''}/verify?hash=${hash}`} />
+                    <small className='field-hint' style={{ marginTop: '8px', display: 'block' }}>
+                      Quét QR code để xác thực chứng chỉ này
+                    </small>
+                  </div>
+                )}
                 {file && isAdmin && (
-                  <div className='card-footer' style={{ justifyContent: 'flex-start' }}>
-                    {res.metadataUri && (
+                  <div className='card-footer' style={{ justifyContent: 'flex-start', marginTop: '16px' }}>
+                    {res?.metadataUri && (
                       <a className='btn btn-ghost' href={res.metadataUri} target='_blank' rel='noreferrer'>Mở metadata</a>
                     )}
                   </div>

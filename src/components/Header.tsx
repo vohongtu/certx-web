@@ -180,6 +180,7 @@ export default function Header() {
                   </NavLink>
                   <NavLink
                     to='/admin'
+                    end
                     onClick={() => setIsAdminDropdownOpen(false)}
                     style={({ isActive }: { isActive: boolean }) => ({
                       display: 'block',
@@ -326,7 +327,7 @@ export default function Header() {
                   <NavLink to='/admin/issue' className={({ isActive }: { isActive: boolean }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick} style={{ paddingLeft: '32px' }}>
                     Cấp phát chứng chỉ
                   </NavLink>
-                  <NavLink to='/admin' className={({ isActive }: { isActive: boolean }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick} style={{ paddingLeft: '32px' }}>
+                  <NavLink to='/admin' end className={({ isActive }: { isActive: boolean }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick} style={{ paddingLeft: '32px' }}>
                     Quản lý chứng chỉ
                   </NavLink>
                   <NavLink to='/admin/users' className={({ isActive }: { isActive: boolean }) => (isActive ? 'mobile-nav-link active' : 'mobile-nav-link')} onClick={handleNavClick} style={{ paddingLeft: '32px' }}>

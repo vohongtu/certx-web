@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { IconShieldCheck, IconCloudUpload } from '@tabler/icons-react'
+import { IconShieldCheck, IconCloudUpload, IconZoomScan } from '@tabler/icons-react'
 import StatusBadge from '../components/StatusBadge'
 import IconButton from '../components/IconButton'
 import { getIconColor } from '../utils/iconColors'
 import ReuploadModal from '../components/ReuploadModal'
 import FilterBar from '../components/FilterBar'
-import PdfViewer from '../components/PdfViewer'
-import { CertSummary, CertListResponse, listCerts, CertStatus, reuploadCert, getPreviewBlobUrl } from '../api/certs.api'
+import PreviewModal from '../components/PreviewModal'
+import { CertSummary, CertListResponse, listCerts, CertStatus, reuploadCert } from '../api/certs.api'
 import { formatDateShort, formatDateRange } from '../utils/format'
 import { truncateHash, copyToClipboard, getPageNumbers } from '../utils/common'
 import { usePagination } from '../hooks/usePagination'
@@ -25,12 +25,7 @@ export default function Manage() {
   const [showReuploadModal, setShowReuploadModal] = useState(false)
   const [selectedCertForReup, setSelectedCertForReup] = useState<CertSummary | null>(null)
   const [isReuploading, setIsReuploading] = useState(false)
-  const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [previewCert, setPreviewCert] = useState<CertSummary | null>(null)
-  const [previewFile, setPreviewFile] = useState<{ url: string; mimeType: string; blob?: Blob } | null>(null)
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
-  const [previewError, setPreviewError] = useState<string | null>(null)
-  const [zoomLevel, setZoomLevel] = useState(1)
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [noteContent, setNoteContent] = useState<{ type: 'rejection' | 'reupload' | 'both'; rejectionReason?: string; reuploadNote?: string } | null>(null)
 
@@ -240,7 +235,14 @@ export default function Manage() {
                       </div>
                     </td>
                     <td style={{ textAlign: 'center', padding: '8px' }}>
-                      <div className='table-actions' style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                      <div className='table-actions' style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                        {/* Xem trước file - cho tất cả status */}
+                        <IconButton
+                          icon={<IconZoomScan size={16} />}
+                          label='Xem trước'
+                          iconColor={getIconColor('preview')}
+                          onClick={() => setPreviewCert(cert)}
+                        />
                         {cert.status === 'VALID' && (
                           <IconButton
                             icon={<IconShieldCheck size={16} />}
@@ -253,14 +255,14 @@ export default function Manage() {
                           />
                         )}
                         {cert.status === 'REJECTED' && cert.allowReupload && !hasPendingReup(cert.id) && (
-                            <IconButton
+                          <IconButton
                             icon={<IconCloudUpload size={16} />}
-                              label='Gửi lại'
-                              iconColor={getIconColor('reupload')}
-                              onClick={() => openReuploadModal(cert)}
-                              disabled={isReuploading}
-                              variant='outline'
-                            />
+                            label='Gửi lại'
+                            iconColor={getIconColor('reupload')}
+                            onClick={() => openReuploadModal(cert)}
+                            disabled={isReuploading}
+                            variant='outline'
+                          />
                         )}
                       </div>
                     </td>
@@ -372,35 +374,12 @@ export default function Manage() {
 
               <div className='cert-card-actions'>
                 {/* Xem trước file */}
-                <button 
-                  className='btn btn-ghost' 
-                  onClick={async () => {
-                    setPreviewCert(cert)
-                    setPreviewError(null)
-                    setIsLoadingPreview(true)
-                    try {
-                      const blobUrl = await getPreviewBlobUrl(cert.id)
-                      // Fetch blob để lấy mimeType
-                      const response = await fetch(blobUrl)
-                      const blob = await response.blob()
-                      const mimeType = blob.type || 'application/pdf'
-                      const url = URL.createObjectURL(blob)
-                      setPreviewFile({ 
-                        url, 
-                        mimeType, 
-                        blob: mimeType.startsWith('image/') ? undefined : blob 
-                      })
-                      setShowPreviewModal(true)
-                    } catch (err: any) {
-                      setPreviewError(err.message || 'Không thể tải file để xem trước')
-                    } finally {
-                      setIsLoadingPreview(false)
-                    }
-                  }}
-                  disabled={isLoadingPreview}
-                >
-                  {isLoadingPreview ? 'Đang tải...' : 'Xem trước'}
-                </button>
+                <IconButton
+                  icon={<IconZoomScan size={16} />}
+                  label='Xem trước'
+                  iconColor={getIconColor('preview')}
+                  onClick={() => setPreviewCert(cert)}
+                />
                 {cert.status === 'VALID' && (
                   <a className='btn btn-ghost' href={`${typeof window !== 'undefined' ? window.location.origin : ''}/verify?hash=${cert.docHash}`} target='_blank' rel='noreferrer'>
                     Xem verify
@@ -522,192 +501,11 @@ export default function Manage() {
       )}
 
       {/* Preview Modal */}
-      {showPreviewModal && previewCert && (
-        <div 
-          className='modal-overlay' 
-          onClick={() => {
-            if (previewFile) URL.revokeObjectURL(previewFile.url)
-          setShowPreviewModal(false)
-          setPreviewCert(null)
-            setPreviewFile(null)
-          setPreviewError(null)
-            setZoomLevel(1)
-          }}
-          style={{ zIndex: 2000 }}
-        >
-          <div 
-            className='modal' 
-            onClick={(e) => e.stopPropagation()}
-            style={{ 
-              maxWidth: '95vw', 
-              width: '1200px',
-              height: '90vh',
-              maxHeight: '90vh',
-              display: 'flex',
-              flexDirection: 'column',
-              padding: 0
-            }}
-          >
-            <div className='modal-header' style={{ flexShrink: 0, padding: '20px 24px' }}>
-              <div>
-                <h3 style={{ margin: 0, marginBottom: '4px' }}>Xem trước file chứng chỉ</h3>
-                <p style={{ margin: 0, fontSize: '14px', color: '#666' }}>
-                  {previewCert.holderName} • {previewCert.degree}
-                </p>
-              </div>
-              <button 
-                className='modal-close-btn' 
-                onClick={() => {
-                  if (previewFile) URL.revokeObjectURL(previewFile.url)
-                setShowPreviewModal(false)
-                setPreviewCert(null)
-                  setPreviewFile(null)
-                setPreviewError(null)
-                  setZoomLevel(1)
-                }}
-                style={{ fontSize: '28px' }}
-              >
-                ×
-              </button>
-            </div>
-            <div 
-              className='modal-body' 
-              style={{ 
-                flex: 1,
-                overflow: 'hidden',
-                padding: '0',
-                display: 'flex',
-                flexDirection: 'column',
-                background: '#f9fafb',
-                minHeight: 0
-              }}
-            >
-              {previewError ? (
-                <div className='alert' style={{ margin: '16px' }}>⚠️ {previewError}</div>
-              ) : previewFile ? (
-                <>
-                  {previewFile.mimeType.startsWith('image/') ? (
-                    <div style={{
-                      flex: 1,
-                      overflow: 'auto',
-                      padding: '24px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: '#f9fafb',
-                      transform: `scale(${zoomLevel})`,
-                      transformOrigin: 'center center',
-                      transition: 'transform 0.2s'
-                    }}>
-                      <img 
-                        src={previewFile.url} 
-                        alt='Certificate' 
-                        style={{ 
-                          maxWidth: '100%', 
-                          maxHeight: '100%', 
-                          objectFit: 'contain',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-                          background: '#fff',
-                          padding: '8px'
-                        }} 
-                      />
-                    </div>
-                  ) : (
-                    <div style={{ 
-                      flex: 1, 
-                      overflow: 'hidden',
-                      transform: `scale(${zoomLevel})`,
-                      transformOrigin: 'top left',
-                      transition: 'transform 0.2s',
-                      width: `${100 / zoomLevel}%`,
-                      height: `${100 / zoomLevel}%`
-                    }}>
-                      <PdfViewer 
-                        file={previewFile.blob || previewFile.url} 
-                        initialMode="fit" 
-                        showControls={false}
-                  />
-                </div>
-                  )}
-                  {/* Zoom controls */}
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '80px',
-                    right: '24px',
-                    display: 'flex',
-                    gap: '8px',
-                    background: 'white',
-                    padding: '8px',
-                    borderRadius: '8px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                    zIndex: 10
-                  }}>
-                    <button
-                      className='btn btn-ghost'
-                      onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))}
-                      style={{ padding: '8px 12px', fontSize: '18px', minWidth: '40px' }}
-                      title="Thu nhỏ"
-                    >
-                      −
-                    </button>
-                    <span style={{ 
-                      fontSize: '14px', 
-                      color: '#666', 
-                      minWidth: '60px', 
-                      textAlign: 'center',
-                      display: 'flex',
-                      alignItems: 'center'
-                    }}>
-                      {Math.round(zoomLevel * 100)}%
-                    </span>
-                    <button
-                      className='btn btn-ghost'
-                      onClick={() => setZoomLevel(z => Math.min(2, z + 0.1))}
-                      style={{ padding: '8px 12px', fontSize: '18px', minWidth: '40px' }}
-                      title="Phóng to"
-                    >
-                      +
-                    </button>
-                    <button
-                      className='btn btn-ghost'
-                      onClick={() => setZoomLevel(1)}
-                      style={{ padding: '8px 12px', fontSize: '12px', marginLeft: '4px' }}
-                      title="Reset zoom"
-                    >
-                      Reset
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className='loading-state' style={{ 
-                  flex: 1, 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center' 
-                }}>
-                  Đang tải file...
-                </div>
-              )}
-            </div>
-            <div className='modal-actions' style={{ flexShrink: 0, padding: '16px 24px' }}>
-              <button
-                className='btn btn-ghost'
-                onClick={() => {
-                  if (previewFile) URL.revokeObjectURL(previewFile.url)
-                setShowPreviewModal(false)
-                setPreviewCert(null)
-                  setPreviewFile(null)
-                setPreviewError(null)
-                  setZoomLevel(1)
-                }}
-              >
-                Đóng
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <PreviewModal
+        cert={previewCert}
+        isOpen={!!previewCert}
+        onClose={() => setPreviewCert(null)}
+      />
 
       {/* Note Modal */}
       {showNoteModal && noteContent && (

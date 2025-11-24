@@ -49,7 +49,7 @@ export default function FilterBar({
           onChange={(e) => onStatusChange(e.target.value as 'ALL' | CertStatus)}
           style={{ minWidth: '140px', padding: '8px 12px', fontSize: '14px', border: '1px solid #ddd', borderRadius: '4px' }}
         >
-          <option value='ALL'>Tất cả trạng thái</option>
+          <option value='ALL'>Tất cả</option>
           <option value='PENDING'>Chờ duyệt</option>
           <option value='APPROVED'>Đã duyệt</option>
           <option value='REJECTED'>Bị từ chối</option>
