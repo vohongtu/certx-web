@@ -101,3 +101,4 @@ export function detectFileTypeFromBytes(bytes: Uint8Array): string {
   return 'unknown'
 }
 
+
