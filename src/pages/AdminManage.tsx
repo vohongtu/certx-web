@@ -125,7 +125,6 @@ export default function AdminManage() {
               const credType = await getCredentialTypeById(selectedCert.credentialTypeId)
               setIsPermanent(credType.isPermanent)
               
-              // Nếu không phải vĩnh viễn, load validity options
               if (!credType.isPermanent) {
                 const options = await listValidityOptions(selectedCert.credentialTypeId)
                 setValidityOptions(options.items || [])
@@ -133,14 +132,12 @@ export default function AdminManage() {
                 setValidityOptions([])
               }
             } catch (err) {
-              // Nếu không load được credential type, thử load tất cả validity options
               console.warn('Could not load credential type, trying to load all validity options:', err)
               setIsPermanent(false)
               const options = await listValidityOptions()
               setValidityOptions(options.items || [])
             }
           } else {
-            // Nếu không có credentialTypeId, thử load tất cả validity options
             setIsPermanent(false)
             try {
               const options = await listValidityOptions()
@@ -168,7 +165,6 @@ export default function AdminManage() {
           // Đối với update modal, set các giá trị hiện tại của cert
           if (showUpdateExpirationModal) {
             // certIssuedDate và expirationDate đã được set khi click button
-            // Chỉ cần đảm bảo validityOptionId được set đúng nếu có
             if (selectedCert.validityOptionId && !selectedValidityOptionId) {
               setSelectedValidityOptionId(selectedCert.validityOptionId)
               setUseCustomExpiration(false)
@@ -582,7 +578,6 @@ export default function AdminManage() {
                                   setSelectedCert(cert)
                                   setCertIssuedDate(cert.issuedDate || '')
                                   setExpirationDate(cert.expirationDate || '')
-                                  // Nếu cert có validityOptionId, set nó; nếu không có nhưng có expirationDate, dùng custom
                                   if (cert.validityOptionId) {
                                     setSelectedValidityOptionId(cert.validityOptionId)
                                     setUseCustomExpiration(false)
@@ -743,7 +738,6 @@ export default function AdminManage() {
                     const newIssuedDate = e.target.value
                     setCertIssuedDate(newIssuedDate)
                     
-                    // Nếu đã chọn validity option, tự động tính lại expirationDate
                     if (selectedValidityOptionId && newIssuedDate) {
                       const selectedOption = validityOptions.find(opt => opt.id === selectedValidityOptionId)
                       if (selectedOption) {
@@ -778,7 +772,6 @@ export default function AdminManage() {
                       ? validityOptions.filter(opt => opt.credentialTypeId === selectedCert.credentialTypeId)
                       : []
                     
-                    // Nếu có filteredOptions, hiển thị dropdown với option Custom
                     if (filteredOptions.length > 0) {
                       return (
                         <>
@@ -883,7 +876,6 @@ export default function AdminManage() {
                         </>
                       )
                     } else {
-                      // Nếu không có filteredOptions, chỉ hiển thị input date
                       return (
                         <div className='field'>
                           <label>Ngày hết hạn *</label>
@@ -1137,7 +1129,6 @@ export default function AdminManage() {
                     const newIssuedDate = e.target.value
                     setCertIssuedDate(newIssuedDate)
                     
-                    // Nếu đã chọn validity option, tự động tính lại expirationDate
                     if (selectedValidityOptionId && newIssuedDate) {
                       const selectedOption = validityOptions.find(opt => opt.id === selectedValidityOptionId)
                       if (selectedOption) {
@@ -1172,7 +1163,6 @@ export default function AdminManage() {
                       ? validityOptions.filter(opt => opt.credentialTypeId === selectedCert.credentialTypeId)
                       : []
                     
-                    // Nếu có filteredOptions, hiển thị dropdown với option Custom
                     if (filteredOptions.length > 0) {
                       return (
                         <>
@@ -1277,7 +1267,6 @@ export default function AdminManage() {
                         </>
                       )
                     } else {
-                      // Nếu không có filteredOptions, chỉ hiển thị input date
                       return (
                         <div className='field'>
                           <label>Ngày hết hạn *</label>

@@ -36,7 +36,6 @@ client.interceptors.request.use((cfg) => {
     cfg.headers.Authorization = `Bearer ${token}`
   }
 
-  // Đảm bảo không set Content-Type cho FormData - axios sẽ tự động set với boundary
   if (cfg.data instanceof FormData) {
     delete cfg.headers['Content-Type']
   }
@@ -47,7 +46,6 @@ client.interceptors.request.use((cfg) => {
 client.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Log chi tiết chỉ ở dev mode
     if (isDev) {
       console.error('[axios] Error:', {
         message: error.message,

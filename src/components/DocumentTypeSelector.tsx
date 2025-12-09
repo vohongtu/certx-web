@@ -93,7 +93,6 @@ export default function DocumentTypeSelector({
   // Load selected type nếu có value
   useEffect(() => {
     if (value && !selectedType && allDocumentTypes.length > 0) {
-      // Nếu value là documentTypeId, tìm trong danh sách
       const found = allDocumentTypes.find(dt => dt.id === value)
       if (found) {
         setSelectedType(found)
@@ -115,7 +114,6 @@ export default function DocumentTypeSelector({
         setHasMore(true)
         loadDocumentTypes(searchText.trim(), 1, false)
       } else {
-        // Nếu không có search, reload tất cả
         setCurrentPage(1)
         setHasMore(true)
         loadDocumentTypes(undefined, 1, false)

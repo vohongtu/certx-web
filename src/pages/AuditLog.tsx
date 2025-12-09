@@ -174,7 +174,6 @@ export default function AuditLog() {
   }
 
   const handleDateRangeChange = (start: string | null, end: string | null) => {
-    // Chỉ lưu tạm, chưa apply filter
     setTempStartDate(start)
     setTempEndDate(end)
   }

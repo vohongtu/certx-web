@@ -38,7 +38,6 @@ export default function AdminIssue() {
             const credType = await getCredentialTypeById(credentialTypeId)
             setIsPermanent(credType.isPermanent)
             
-            // Nếu không phải vĩnh viễn, load validity options
             if (!credType.isPermanent) {
               const options = await listValidityOptions(credentialTypeId)
               setValidityOptions(options.items || [])
@@ -46,14 +45,12 @@ export default function AdminIssue() {
               setValidityOptions([])
             }
           } catch (err) {
-            // Nếu không load được credential type, thử load tất cả validity options
             console.warn('Could not load credential type, trying to load all validity options:', err)
             setIsPermanent(false)
             const options = await listValidityOptions()
             setValidityOptions(options.items || [])
           }
         } else {
-          // Nếu không có credentialTypeId (custom degree), thử load tất cả validity options
           setIsPermanent(false)
           try {
             const options = await listValidityOptions()
@@ -260,7 +257,6 @@ export default function AdminIssue() {
                 if (userId && userName) {
                   setHolderName(userName)
                 } else if (!userId) {
-                  // Nếu xóa user, giữ nguyên tên (user có thể đã chỉnh sửa)
                   // Không tự động xóa holderName
                 }
               }}

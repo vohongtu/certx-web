@@ -175,7 +175,6 @@ export default function CredentialManagement() {
           isPermanent: typeForm.isPermanent
         })
 
-        // Nếu có pending validity options, tạo chúng sau khi credential type đã được tạo
         if (pendingValidityOptions.length > 0 && !typeForm.isPermanent) {
           await Promise.allSettled(
             pendingValidityOptions.map(option =>
@@ -190,7 +189,6 @@ export default function CredentialManagement() {
           )
         }
 
-        // Khi tạo mới, quay về trang 1 và refresh danh sách
         closeTypeModal()
         // Clear danh sách trước để hiển thị loading
         setCredentialTypes([])
@@ -204,7 +202,6 @@ export default function CredentialManagement() {
         return
       }
       closeTypeModal()
-      // Khi update, giữ nguyên trang hiện tại
       await loadCredentialTypes(typePagination.page, typeLimit)
     } catch (error: any) {
       alert(error.message || 'Có lỗi xảy ra')
@@ -279,7 +276,6 @@ export default function CredentialManagement() {
       if (editingOption) {
         // Cập nhật option
         if (editingType) {
-          // Nếu đang sửa credential type đã tồn tại, cập nhật option trong backend
         await updateValidityOption(editingOption.id, {
           credentialTypeId: currentCredentialTypeId,
           periodMonths,
@@ -289,7 +285,6 @@ export default function CredentialManagement() {
           closeOptionModal()
           loadValidityOptionsForType(currentCredentialTypeId)
         } else {
-          // Nếu đang tạo credential type mới, cập nhật option trong pending list
           setPendingValidityOptions(prev => prev.map(opt => 
             opt.id === editingOption.id 
               ? { id: editingOption.id, periodMonths, periodDays, note: optionForm.note.trim() || null }
@@ -305,7 +300,6 @@ export default function CredentialManagement() {
       } else {
         // Tạo option mới
         if (editingType) {
-          // Nếu đang sửa credential type đã tồn tại, tạo option ngay
         await createValidityOption({
           id: optionForm.id.trim(),
           credentialTypeId: currentCredentialTypeId,
@@ -316,7 +310,6 @@ export default function CredentialManagement() {
           closeOptionModal()
           loadValidityOptionsForType(currentCredentialTypeId)
         } else {
-          // Nếu đang tạo credential type mới, lưu vào pending list
           const newOption = {
             id: optionForm.id.trim(),
             periodMonths,
@@ -345,14 +338,12 @@ export default function CredentialManagement() {
 
     const currentCredentialTypeId = editingType?.id || typeForm.id
 
-    // Nếu đang tạo credential type mới, chỉ xóa khỏi pending list
     if (!editingType) {
       setPendingValidityOptions(prev => prev.filter(opt => opt.id !== id))
       setCurrentTypeValidityOptions(prev => prev.filter(opt => opt.id !== id))
       return
     }
 
-    // Nếu đang sửa credential type đã tồn tại, xóa từ backend
     try {
       await deleteValidityOption(id)
       // Reload validity options for current credential type

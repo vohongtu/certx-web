@@ -97,7 +97,6 @@ export default function UserManage() {
       if (editingUser) {
         await updateUser(editingUser.id, userForm)
       } else {
-        // Khi tạo user, không gửi address nếu role là USER
         const userData = userForm.role === 'USER' 
           ? { ...userForm, address: undefined }
           : userForm
@@ -134,7 +133,6 @@ export default function UserManage() {
     if (!confirm('Bạn có chắc chắn muốn xóa user này?')) return
     try {
       await deleteUser(id)
-      // Nếu xóa user ở trang cuối và trang đó chỉ còn 1 user, quay về trang trước
       const newPage = userPagination.page > 1 && users.length === 1 
         ? userPagination.page - 1 
         : userPagination.page

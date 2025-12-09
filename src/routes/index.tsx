@@ -37,7 +37,6 @@ export default function RoutesView() {
           (() => {
             const decoded = decodeJwt(token)
             const role = (decoded as any)?.role
-            // Chỉ user thường mới được truy cập /issue
             if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
               return <Navigate to="/admin/issue" replace />
             }

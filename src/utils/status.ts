@@ -7,12 +7,10 @@ import { CertStatus } from '../api/certs.api'
  * @returns Status đã tính toán, có thể là 'EXPIRED' nếu đã hết hạn
  */
 export function calculateStatus(baseStatus: 'VALID' | 'REVOKED', expirationDate?: string): CertStatus {
-  // Nếu đã bị thu hồi, giữ nguyên REVOKED
   if (baseStatus === 'REVOKED') {
     return 'REVOKED'
   }
   
-  // Nếu không có expirationDate, giữ nguyên status
   if (!expirationDate) {
     return baseStatus
   }
@@ -27,7 +25,6 @@ export function calculateStatus(baseStatus: 'VALID' | 'REVOKED', expirationDate?
       return 'EXPIRED'
     }
   } catch (error) {
-    // Nếu parse date lỗi, giữ nguyên status
     console.error('Error parsing expirationDate:', error)
   }
   

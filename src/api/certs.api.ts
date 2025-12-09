@@ -124,7 +124,6 @@ export async function issueCert(form: FormData) {
       console.error('[issueCert] Error:', error)
     }
 
-    // Nếu fetch fail, thử fallback về axios
     if (error.name === 'TypeError' && error.message?.includes('Failed to fetch')) {
       try {
         const axios = (await import('axios')).default
