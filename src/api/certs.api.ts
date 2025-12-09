@@ -195,7 +195,7 @@ export async function verifyHash(hash: string) {
 // User upload file (chỉ upload, không cấp phát)
 export async function uploadFile(form: FormData) {
   const isDev = import.meta.env.DEV
-  const proxyUrl = '/api/certs/upload'
+  const proxyUrl = `${import.meta.env.VITE_API_BASE}/certs/upload`
   const storageKey = import.meta.env.VITE_STORAGE_TOKEN || 'certx_token'
   const token = localStorage.getItem(storageKey)
 
@@ -333,7 +333,7 @@ export async function getPreviewBlobUrl(id: string): Promise<string> {
 // User reupload cert
 export async function reuploadCert(id: string, form: FormData) {
   const isDev = import.meta.env.DEV
-  const proxyUrl = `/api/certs/${id}/reupload`
+  const proxyUrl = `${import.meta.env.VITE_API_BASE}/certs/${id}/reupload`
   const storageKey = import.meta.env.VITE_STORAGE_TOKEN || 'certx_token'
   const token = localStorage.getItem(storageKey)
 
