@@ -51,16 +51,44 @@ export default function Header() {
       }
     }
 
+    let lastScrollY = window.scrollY
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY
+      if (isMenuOpen && Math.abs(currentScrollY - lastScrollY) > 5) {
+        setIsMenuOpen(false)
+      }
+      lastScrollY = currentScrollY
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (isMenuOpen) {
+        const target = e.target as HTMLElement
+        if (!target.closest('.mobile-menu')) {
+          setIsMenuOpen(false)
+        }
+      }
+    }
+
     if (isMenuOpen) {
       document.addEventListener('keydown', handleEscape)
+      window.addEventListener('scroll', handleScroll, { passive: true })
+      document.addEventListener('touchmove', handleTouchMove, { passive: true })
       document.body.style.overflow = 'hidden'
+      document.body.style.position = 'fixed'
+      document.body.style.width = '100%'
     } else {
       document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscape)
+      window.removeEventListener('scroll', handleScroll)
+      document.removeEventListener('touchmove', handleTouchMove)
       document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
     }
   }, [isMenuOpen])
 
