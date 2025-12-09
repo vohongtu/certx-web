@@ -6,7 +6,14 @@ const storageExpKey = `${storageKey}_exp`
 const authEvent = 'certx-auth-change'
 const isDev = import.meta.env.DEV
 
-const baseURL = import.meta.env.VITE_API_BASE || 'http://localhost:8080'
+
+const envApiBase = import.meta.env.VITE_API_BASE
+
+const baseURL = envApiBase 
+  ? envApiBase 
+  : isDev 
+    ? '/api' 
+    : 'http://localhost:8080' 
 
 const client = axios.create({
   baseURL: baseURL,

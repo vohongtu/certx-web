@@ -74,9 +74,19 @@ function formatErrorMessage(error: any): string {
   return 'Có lỗi xảy ra. Vui lòng thử lại sau.'
 }
 
+function getApiBaseUrl(): string {
+  const isDev = import.meta.env.DEV
+  const envApiBase = import.meta.env.VITE_API_BASE
+  return envApiBase 
+    ? envApiBase 
+    : isDev 
+      ? '/api' 
+      : 'http://localhost:8080' 
+}
+
 export async function issueCert(form: FormData) {
   const isDev = import.meta.env.DEV
-  const proxyUrl =  `${import.meta.env.VITE_API_BASE}/certs/issue`
+  const proxyUrl =  `${getApiBaseUrl()}/certs/issue`
   const storageKey = import.meta.env.VITE_STORAGE_TOKEN || 'certx_token'
   const token = localStorage.getItem(storageKey)
 
@@ -195,7 +205,7 @@ export async function verifyHash(hash: string) {
 // User upload file (chỉ upload, không cấp phát)
 export async function uploadFile(form: FormData) {
   const isDev = import.meta.env.DEV
-  const proxyUrl = `${import.meta.env.VITE_API_BASE}/certs/upload`
+  const proxyUrl = `${getApiBaseUrl()}/certs/upload`
   const storageKey = import.meta.env.VITE_STORAGE_TOKEN || 'certx_token'
   const token = localStorage.getItem(storageKey)
 
@@ -333,7 +343,7 @@ export async function getPreviewBlobUrl(id: string): Promise<string> {
 // User reupload cert
 export async function reuploadCert(id: string, form: FormData) {
   const isDev = import.meta.env.DEV
-  const proxyUrl = `${import.meta.env.VITE_API_BASE}/certs/${id}/reupload`
+  const proxyUrl = `${getApiBaseUrl()}/certs/${id}/reupload`
   const storageKey = import.meta.env.VITE_STORAGE_TOKEN || 'certx_token'
   const token = localStorage.getItem(storageKey)
 
