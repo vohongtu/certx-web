@@ -52,12 +52,15 @@ export default function Header() {
     }
 
     let lastScrollY = window.scrollY
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY
-      if (isMenuOpen && Math.abs(currentScrollY - lastScrollY) > 5) {
-        setIsMenuOpen(false)
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLElement
+      if (isMenuOpen && !target.closest('.mobile-menu')) {
+        const currentScrollY = window.scrollY
+        if (Math.abs(currentScrollY - lastScrollY) > 5) {
+          setIsMenuOpen(false)
+        }
+        lastScrollY = currentScrollY
       }
-      lastScrollY = currentScrollY
     }
 
     const handleTouchMove = (e: TouchEvent) => {
@@ -71,7 +74,7 @@ export default function Header() {
 
     if (isMenuOpen) {
       document.addEventListener('keydown', handleEscape)
-      window.addEventListener('scroll', handleScroll, { passive: true })
+      document.addEventListener('scroll', handleScroll, { passive: true, capture: true })
       document.addEventListener('touchmove', handleTouchMove, { passive: true })
       document.body.style.overflow = 'hidden'
       document.body.style.position = 'fixed'
@@ -84,7 +87,7 @@ export default function Header() {
 
     return () => {
       document.removeEventListener('keydown', handleEscape)
-      window.removeEventListener('scroll', handleScroll)
+      document.removeEventListener('scroll', handleScroll, { capture: true })
       document.removeEventListener('touchmove', handleTouchMove)
       document.body.style.overflow = ''
       document.body.style.position = ''
