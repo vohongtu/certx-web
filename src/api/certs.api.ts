@@ -76,7 +76,7 @@ function formatErrorMessage(error: any): string {
 
 export async function issueCert(form: FormData) {
   const isDev = import.meta.env.DEV
-  const proxyUrl =  `${import.meta.env.VITE_API_BASE}/api/certs/issue`
+  const proxyUrl =  `${import.meta.env.VITE_API_BASE}/certs/issue`
   const storageKey = import.meta.env.VITE_STORAGE_TOKEN || 'certx_token'
   const token = localStorage.getItem(storageKey)
 
